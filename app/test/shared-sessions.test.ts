@@ -118,4 +118,87 @@ describe('sessions of somebody else', () => {
     ws.align([{ ...(await annas(backend)), state: 'submitted' }])
     expect(session.state).toBe('submitted')
   })
+
+  it('look again and merge when the branch moves between the look and the save', async () => {
+    const { backend, ws } = setup()
+    const session = (await ws.adopt(await annas(backend)))!
+    ws.selectSession(session.id)
+    const review = backend.review.bind(backend)
+    let moved = false
+    vi.spyOn(backend, 'review').mockImplementation(async (number, since) => {
+      const seen = await review(number, since)
+      if (!moved) {
+        moved = true
+        // Anna saves while we are between the look and the save.
+        backend.branches.get('annas-fund')!.set(ID, text('Brief', 'von Anna'))
+        backend.heads.set('annas-fund', 7)
+      }
+      return seen
+    })
+    ws.objects[0].text = text('Brief an Anna')
+    await ws.sync()
+    expect(backend.branches.get('annas-fund')?.get(ID)).toBe(text('Brief an Anna', 'von Anna'))
+    expect(ws.unsaved).toHaveLength(0)
+  })
+
+  it('do not write over the branch with a text that cannot be read, and look again later', async () => {
+    const { backend, ws } = setup()
+    const session = (await ws.adopt(await annas(backend)))!
+    ws.selectSession(session.id)
+    backend.branches.get('annas-fund')!.set(ID, text('Brief', 'von Anna'))
+    backend.heads.set('annas-fund', 5)
+    ws.objects[0].text = 'title: [offen\n'
+    await ws.sync()
+    // nothing of Anna's was written over, and the branch is not taken as seen
+    expect(backend.branches.get('annas-fund')?.get(ID)).toBe(text('Brief', 'von Anna'))
+    expect(session.head).not.toBe('fake-5')
+    expect(ws.chat.some((m) => m.text.includes('nicht lesbar'))).toBe(true)
+    // once it can be read again, it is merged and saved
+    ws.objects[0].text = text('Brief an Anna')
+    await ws.sync()
+    expect(backend.branches.get('annas-fund')?.get(ID)).toBe(text('Brief an Anna', 'von Anna'))
+  })
+
+  it('put what was not saved into a new session when the session is accepted meanwhile', async () => {
+    const { backend, ws } = setup()
+    const session = (await ws.adopt(await annas(backend)))!
+    ws.selectSession(session.id)
+    ws.objects[0].text = text('Noch nicht gesichert')
+    backend.merged = true
+    await ws.sync()
+    expect(session.state).toBe('merged')
+    // nothing was written to the finished session
+    expect(backend.branches.get('annas-fund')?.get(ID)).toBe(text('Brief'))
+    const follow = ws.sessions.find((s) => s.id !== session.id)
+    expect(follow?.name).toBe('annas-fund (Nachtrag)')
+    expect(ws.objects[0]).toMatchObject({ sessionId: follow?.id, text: text('Noch nicht gesichert'), synced: undefined })
+    expect(ws.chat.some((m) => m.text.includes('Nachtrag'))).toBe(true)
+  })
+
+  it('drop an object that was taken out of the session on the branch, when nothing was changed here', async () => {
+    const { backend, ws } = setup()
+    const session = (await ws.adopt(await annas(backend)))!
+    backend.branches.get('annas-fund')!.delete(ID)
+    backend.heads.set('annas-fund', 3)
+    await ws.pullSession(session)
+    expect(ws.objects).toHaveLength(0)
+  })
+
+  it('take over a change of the branch when the session is looked at', async () => {
+    const { backend, ws } = setup()
+    const session = (await ws.adopt(await annas(backend)))!
+    backend.branches.get('annas-fund')!.set(ID, text('Brief', 'neu'))
+    backend.heads.set('annas-fund', 2)
+    await ws.pullSession(session)
+    expect(ws.objects[0].text).toBe(text('Brief', 'neu'))
+    expect(session.head).toBe('fake-2')
+  })
+
+  it('settle: save and take over, then say that nothing is left', async () => {
+    const { backend, ws } = setup()
+    const session = (await ws.adopt(await annas(backend)))!
+    ws.objects[0].text = text('Geändert')
+    expect(await ws.settle(session)).toBe(true)
+    expect(backend.branches.get('annas-fund')?.get(ID)).toBe(text('Geändert'))
+  })
 })

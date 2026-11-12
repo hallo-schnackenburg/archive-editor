@@ -126,6 +126,15 @@
     })
   })
 
+  // The session that is worked on takes over what is new on its branch, when it is shown and whenever GitHub tells that it changed
+  // (the loaded detail of the review changes its commit then).
+  $effect(() => {
+    const session = view === 'work' ? ws.current : undefined
+    void review.detail?.head
+    void review.list
+    if (session?.pull !== undefined) untrack(() => void ws.pullSession(session))
+  })
+
   // What GitHub says about the sessions that are here (submitted, returned or accepted by somebody) is taken over.
   $effect(() => {
     const list = review.list
@@ -203,6 +212,17 @@
   }
 
   async function go(action: Action) {
+    const session = view === 'work' ? ws.current : undefined
+    if (action === 'merge' && session?.pull !== undefined && session.pull === review.selectedPull) {
+      // What was typed or changed by others is brought together and saved first, and what is accepted is what was seen here.
+      if (!(await ws.settle(session))) {
+        review.actionError = 'Es gibt noch Änderungen, die nicht bei GitHub sind. Bitte erst speichern lassen und dann noch einmal versuchen.'
+        return
+      }
+      if (session.state === 'merged') return // it was accepted meanwhile
+      if (await review.act(action, session.head)) asking = undefined
+      return
+    }
     if (await review.act(action)) asking = undefined
   }
 

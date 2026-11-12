@@ -131,6 +131,23 @@ describe('the token of a session', () => {
     expect(gh.state.calls[0].auth).toBe('Bearer ghu_renewed')
   })
 
+  it('is not renewed again for somebody who has lost the right to write to the data repository: that ends the session', async () => {
+    const gh = fakeGitHub({ permissions: { push: false } })
+    const almostOut = await cookieOf({ ...anna, accessExpires: Date.now() + 60_000 })
+    const response = await handle(get('/api/auth/me', almostOut), env, gh.fn)
+    expect(response.status).toBe(401)
+    expect(cookieValue(response, 'tamandua_session')).toBeUndefined()
+  })
+
+  it('is left alone by a WebSocket: its response cannot carry a new cookie, so the refresh token must not be used up', async () => {
+    const gh = fakeGitHub()
+    const almostOut = await cookieOf({ ...anna, accessExpires: Date.now() + 60_000 })
+    const response = await handle(new Request('http://worker/api/live', { headers: { cookie: almostOut, upgrade: 'websocket', origin: 'http://localhost:5173' } }), env, gh.fn)
+    expect(response.status).toBe(503) // no hub in the test setup; the point is that the session was accepted and not renewed
+    expect(gh.state.calls).toEqual([])
+    expect(response.headers.getSetCookie()).toEqual([])
+  })
+
   it('ends when it cannot be renewed', async () => {
     const gh = fakeGitHub()
     const noRefresh = await cookieOf({ ...anna, accessExpires: Date.now() - 1, refresh: undefined })

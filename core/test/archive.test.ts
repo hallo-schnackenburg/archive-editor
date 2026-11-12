@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs'
+import Ajv2020 from 'ajv/dist/2020.js'
+import addFormats from 'ajv-formats'
 import { describe, expect, it } from 'vitest'
 import { render } from '../scripts/generate.mjs'
 import { CAPTURE_FIELDS, ENTITY_NAMES, ENTITY_TYPES, EXTERNAL_NAMES, EXTERNAL_TYPES, FIELD_NAMES, OBJECT_TYPES, SUBTYPE_NAMES, TYPE_NAMES } from '../src/archive.generated.js'
@@ -55,6 +57,36 @@ describe('archive.yaml', () => {
     expect(schema.$defs.group.properties).toEqual({ files: false, storage: false, external: false })
   })
 
+  describe('with more than one type that has no files', () => {
+    const series = `object_types:
+  series:
+    label: Reihe
+    description: A series of publications.
+    subtypes:
+      newspaper: Zeitung
+    files: false
+    fields:
+      issn:
+        label: ISSN
+        schema:
+          type: string
+`
+    const more = JSON.parse(render(archiveYaml.replace('object_types:\n', series)).schema)
+    const ajv = new Ajv2020({ allErrors: true, strict: false })
+    addFormats(ajv)
+    const valid = ajv.compile(more)
+    const base = { id: '01JC8Z3Q7M5K2V9X4T6R1B0N8D', title: 'Wendland-Anzeiger' }
+
+    it('gives each its rules: no files, no storage, and its own fields', () => {
+      expect(valid({ ...base, type: 'series', issn: '1234-5678' })).toBe(true)
+      expect(valid({ ...base, type: 'series', files: [] })).toBe(false)
+      expect(valid({ ...base, type: 'series', storage: 'local' })).toBe(false)
+      expect(valid({ ...base, type: 'group', subtype: 'album' })).toBe(true)
+      expect(valid({ ...base, type: 'group', files: [] })).toBe(false)
+      expect(valid({ ...base, type: 'group', issn: 'x' })).toBe(false) // the fields of a type are its own
+    })
+  })
+
   describe('refuses', () => {
     const bad = (change: (text: string) => string) => () => render(change(archiveYaml))
     it('a file without object types', () => expect(() => render('entity_types: {person: Person}\n')).toThrow(/object_types/))
@@ -63,6 +95,7 @@ describe('archive.yaml', () => {
     it('a subtype without a German name', () => expect(bad((t) => t.replace('photo: Foto', 'photo: ""'))).toThrow(/photo/))
     it('no entity types', () => expect(bad((t) => t.replace(/entity_types:[\s\S]*?\nexternal_types:/, 'external_types:'))).toThrow(/entity_types/))
     it('no external types', () => expect(bad((t) => t.replace(/external_types:[\s\S]*?\nvirtual_fields:/, 'virtual_fields:'))).toThrow(/external_types/))
+    it('a type named like a definition of the schema', () => expect(bad((t) => t.replace('  image:\n    label: Bild', '  common:\n    label: Bild'))).toThrow(/already used/))
     it('a type whose files have no role', () => expect(bad((t) => t.replace('role: main', 'rolle: main'))).toThrow(/files/))
     it('fields without a title', () => expect(bad((t) => t.replace(/\n  title:\n    label: Titel[\s\S]*?\n  description:/, '\n  description:'))).toThrow(/title/))
   })

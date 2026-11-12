@@ -17,6 +17,7 @@
   // All state lives in the workspace; this component only arranges the panes.
   // With a Worker the app is real: the model answers and files go to the bucket. Without one, stand-ins.
   const workerUrl = import.meta.env.VITE_WORKER_URL
+  if (import.meta.env.PROD && !workerUrl) throw new Error('VITE_WORKER_URL fehlt: ein Produktions-Build darf nicht mit den Attrappen laufen.')
   const backend = workerUrl ? new HttpBackend(workerUrl) : new FakeBackend()
   // For tests in a browser: the stand-in can be filled from outside.
   if (import.meta.env.DEV && backend instanceof FakeBackend) (window as unknown as { __fake: FakeBackend }).__fake = backend

@@ -16,6 +16,8 @@ export interface Merged {
   conflicts: Conflict[]
   /** The fields that were taken from the other side (or put together), for a note to the person. */
   taken: string[]
+  /** One of the texts could not be read (half typed): nothing was merged, and the caller must not treat the other side as seen. */
+  unreadable?: true
 }
 
 type Entry = Record<string, unknown>
@@ -51,7 +53,7 @@ function mergeFiles(base: unknown, mine: unknown, theirs: unknown): unknown[] {
  */
 export function mergeObject(base: string, mine: string, theirs: string): Merged {
   const docs = [base, mine, theirs].map((text) => parseDocument(text))
-  if (docs.some((d) => d.errors.length > 0 || !isMap(d.contents))) return { text: mine, conflicts: [], taken: [] }
+  if (docs.some((d) => d.errors.length > 0 || !isMap(d.contents))) return { text: mine, conflicts: [], taken: [], unreadable: true }
   const [b, m, t] = docs.map((d) => d.toJS() as Record<string, unknown>)
   const doc = docs[1]
   const conflicts: Conflict[] = []

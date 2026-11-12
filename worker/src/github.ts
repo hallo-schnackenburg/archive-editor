@@ -167,6 +167,9 @@ export interface PullInfo {
 export type Checks = 'none' | 'pending' | 'failure' | 'success' | 'unknown'
 
 /** A comment as GitHub gives it (an ordinary one on the pull request, or one on a line of a file in it). */
+/** The path of an object in the data repository: the only kind of file a session may change. */
+export const OBJECT_FILE = /^objects\/[0-9A-HJKMNP-TV-Z]\/[0-9A-HJKMNP-TV-Z]\/([0-9A-HJKMNP-TV-Z]{26})\.yaml$/
+
 export interface RawComment {
   id: number
   body: string
@@ -232,12 +235,15 @@ export class Repo {
   /**
    * Puts the files into one commit on the branch (created from the base branch if it does not exist) and
    * removes the paths in `removals` that exist there. Returns the commit's hash, or null if there was
-   * nothing to change. If someone else moved the branch meanwhile, it is tried once more.
+   * nothing to change. If someone else moved the branch meanwhile, it is tried once more, unless the caller said which commit
+   * it saw (`expected`): then a moved branch is a 409.
    */
   /** `message` may be made from the paths that were really removed (those that were not there are left out). */
-  async save(branch: string, files: RepoFile[], removals: string[], message: string | ((removed: string[]) => string)): Promise<string | null> {
+  async save(branch: string, files: RepoFile[], removals: string[], message: string | ((removed: string[]) => string), expected?: string): Promise<string | null> {
     for (let attempt = 0; ; attempt++) {
       const head = await this.head(branch)
+      // The caller saw the branch at `expected`: if it moved since, somebody else's work is not seen yet, and nothing is written over it.
+      if (expected && head && head !== expected) throw new GitHubError('Der Branch hat sich geändert.', 409)
       let from = head
       if (!from) {
         from = await this.head(this.base)
@@ -265,6 +271,7 @@ export class Repo {
       } catch (error) {
         const raced = error instanceof GitHubError && (error.status === 422 || error.status === 409)
         if (!raced || attempt >= 1) throw error
+        if (expected) throw new GitHubError('Der Branch hat sich geändert.', 409)
       }
     }
   }
@@ -378,6 +385,11 @@ export class Repo {
    */
   async merge(number: number, head?: string): Promise<Pull> {
     await this.waiting(number)
+    // A session changes objects and nothing else. A branch that was pushed to by hand may carry more (a workflow, say): that is not accepted here.
+    const { files } = await this.pullFiles(number)
+    if (files.some((file) => !OBJECT_FILE.test(file.filename))) {
+      throw new GitHubError('Diese Erfassung ändert auch Dateien, die keine Objekte sind. Sie wird hier nicht übernommen, bitte auf GitHub prüfen.', 409)
+    }
     try {
       await this.call('PUT', `/pulls/${number}/merge`, { merge_method: 'squash', ...(head ? { sha: head } : {}) })
     } catch (error) {
@@ -425,14 +437,21 @@ export class Repo {
     return comment
   }
 
-  /** Changes the text of a comment. GitHub allows it for the person who wrote it, and for nobody else without the right to. */
-  async editComment(id: number, body: string): Promise<RawComment> {
-    await this.issueComment(id)
+  /** The comment of this person: changing or removing the comment of somebody else is refused here, though GitHub would allow it for everybody with write access. */
+  private async ownComment(id: number, login: string): Promise<RawComment> {
+    const comment = await this.issueComment(id)
+    if ((comment.user?.login ?? '').toLowerCase() !== login.toLowerCase()) throw new GitHubError('Das darf nur, wer den Kommentar geschrieben hat.', 403)
+    return comment
+  }
+
+  /** Changes the text of a comment of `login`. */
+  async editComment(id: number, body: string, login: string): Promise<RawComment> {
+    await this.ownComment(id, login)
     return this.call<RawComment>('PATCH', `/issues/comments/${id}`, { body })
   }
 
-  async deleteComment(id: number): Promise<void> {
-    await this.issueComment(id)
+  async deleteComment(id: number, login: string): Promise<void> {
+    await this.ownComment(id, login)
     await this.call('DELETE', `/issues/comments/${id}`)
   }
 

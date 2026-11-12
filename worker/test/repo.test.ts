@@ -17,6 +17,18 @@ const BRANCH = 'erfassung/anna/dachbodenfund-postkarten-4k2x'
 const objects = (...ids: string[]) => ({ session, objects: ids.map((id) => ({ id, text: text(id) })) })
 const saveOf = async (gh: ReturnType<typeof fakeGitHub>, data: unknown) => handle(post('/repo/save', data), env, gh.fn)
 
+describe('requests that change something', () => {
+  it('only come from our own app: another origin is refused, no Origin header (not a browser page) and our own are fine', async () => {
+    const gh = fakeGitHub()
+    const from = (origin?: string) => new Request('http://worker/api/repo/save', { method: 'POST', headers: { cookie, ...(origin ? { origin } : {}) }, body: JSON.stringify(objects(ID_A)) })
+    expect((await handle(from('https://evil.example'), env, gh.fn)).status).toBe(403)
+    expect((await handle(from('http://evil.worker'), env, gh.fn)).status).toBe(403)
+    expect(gh.mock).not.toHaveBeenCalled()
+    expect((await handle(from(), env, gh.fn)).status).toBe(200)
+    expect((await handle(from('http://localhost:5173'), { ...env, ALLOWED_ORIGIN: 'http://localhost:5173' }, fakeGitHub().fn)).status).toBe(200)
+  })
+})
+
 describe('POST /repo/save', () => {
   it('puts the objects into one commit on the session\'s branch, made from main', async () => {
     const gh = fakeGitHub()
@@ -43,6 +55,20 @@ describe('POST /repo/save', () => {
     // The marker in the pull request does not carry the owner: it is the branch that says whose session it is.
     expect(gh.state.pulls[0].body).not.toContain('bernd"')
     expect((await saveOf(gh, { ...objects(ID_A), session: { ...session, owner: 'a/../b' } })).status).toBe(400)
+  })
+
+  it('writes nothing when the branch is further than the caller saw (409, stale), and saves when it is the same', async () => {
+    const gh = fakeGitHub()
+    const first = (await (await saveOf(gh, objects(ID_A))).json()) as { commit: string }
+    // Somebody else adds a commit.
+    const other = (await (await saveOf(gh, objects(ID_B))).json()) as { commit: string }
+    const stale = await saveOf(gh, { ...objects(ID_A, ID_B), session: { ...session }, base: first.commit })
+    expect(stale.status).toBe(409)
+    expect(await stale.json()).toMatchObject({ stale: true })
+    expect(gh.state.refs[BRANCH]).toBe(other.commit)
+    const fresh = await saveOf(gh, { ...objects(ID_A), base: other.commit })
+    expect(fresh.status).toBe(200)
+    expect((await saveOf(gh, { ...objects(ID_A), base: 'no/commit' })).status).toBe(400)
   })
 
   it('keeps sessions apart: every session has its own branch', async () => {
@@ -516,6 +542,17 @@ describe('reviewing a submitted session', () => {
     expect(gh.state.merges).toEqual([{ number, body: { merge_method: 'squash', sha: head } }])
   })
 
+  it('does not merge a branch that changes anything but objects (somebody pushed to it by hand)', async () => {
+    const { gh, number, head } = await submitted()
+    const tree = gh.state.trees[gh.state.commits[gh.state.refs[BRANCH]].tree]
+    tree.files.set('.github/workflows/evil.yml', 'on: push')
+    tree.paths.add('.github/workflows/evil.yml')
+    const response = await act(gh, 'merge', { number, head })
+    expect(response.status).toBe(409)
+    expect(((await response.json()) as { error: string }).error).toContain('keine Objekte')
+    expect(gh.state.merges).toEqual([])
+  })
+
   it('does not merge what changed since it was looked at', async () => {
     const { gh, number, head } = await submitted()
     await saveOf(gh, objects(ID_B)) // the owner went on
@@ -658,7 +695,7 @@ describe('comments on a session', () => {
     expect(gh.state.comments).toEqual([])
   })
 
-  it('does not let one change the comment of another (GitHub says no)', async () => {
+  it('does not let one change the comment of another, though GitHub would allow it for anybody with write access', async () => {
     const { gh, number } = await started()
     gh.state.comments.push({ id: 100, number, body: 'Von Bernd', login: 'bernd', createdAt: 't', updatedAt: 't' })
     expect((await send(gh, 'PATCH', '/repo/comment/100', { text: 'Meins jetzt' })).status).toBe(403)

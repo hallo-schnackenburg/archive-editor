@@ -42,18 +42,31 @@ export interface Signed {
   cookie?: string
 }
 
-/** The signed-in person of a request, with the token renewed if it is about to expire. Null if nobody. */
-export async function readSession(request: Request, env: AuthEnv, fetchFn: typeof fetch): Promise<Signed | null> {
+/**
+ * The signed-in person of a request, with the token renewed if it is about to expire. Null if nobody. A renewal is also when
+ * the right to write to the data repository is looked at again: whoever lost it is signed out (for good, the token is revoked).
+ * `renew: false` (for a WebSocket, whose response cannot carry a new cookie, and which needs no token) leaves the tokens alone:
+ * a renewal would use up the refresh token and the browser would never get the new one.
+ */
+export async function readSession(request: Request, env: AuthEnv, fetchFn: typeof fetch, { renew = true } = {}): Promise<Signed | null> {
   const raw = readCookie(request, SESSION_COOKIE)
   if (!raw || !env.SESSION_SECRET) return null
   const session = await unseal<Auth>(raw, env.SESSION_SECRET)
   if (!session) return null
 
+  const refreshable = !!session.refresh && (session.refreshExpires ?? Infinity) >= Date.now()
   if (session.accessExpires - Date.now() > RENEW_BEFORE) return { session }
-  if (!session.refresh || (session.refreshExpires ?? Infinity) < Date.now()) return null
+  if (!refreshable) return null
+  if (!renew) return { session }
   try {
-    const tokens = await refreshTokens(env, session.refresh, fetchFn)
-    const renewed = withTokens(session, tokens)
+    const tokens = await refreshTokens(env, session.refresh!, fetchFn)
+    // Only a clear "no" ends the session; if GitHub cannot be asked right now, the person is not thrown out for that.
+    const role = await repoRole(tokens.access, env.DATA_REPO!, fetchFn).catch(() => session.role)
+    if (role === 'none') {
+      await revoke(env, tokens.access, fetchFn).catch(() => undefined)
+      return null
+    }
+    const renewed = { ...withTokens(session, tokens), role }
     return { session: renewed, cookie: setCookie(SESSION_COOKIE, await seal(renewed, env.SESSION_SECRET), MAX_AGE, isHttps(request)) }
   } catch {
     return null

@@ -34,6 +34,8 @@ interface Part {
 interface Answer {
   path: string
   exists: boolean
+  /** Something else is stored under the path: the file is not uploaded. */
+  conflict?: boolean
   url?: string
   headers?: Record<string, string>
 }
@@ -75,6 +77,9 @@ export class S3Store implements FileStore {
     }
 
     const answers = await this.#plan(parts)
+    if ([...answers.values()].some((answer) => answer.conflict)) {
+      return { status: 'conflict', message: 'Im Speicher liegt unter diesem Pfad schon eine andere Datei. Sie wird nicht überschrieben.' }
+    }
     const missing = parts.filter((part) => answers.get(part.path)?.exists === false)
     const total = missing.reduce((sum, part) => sum + part.body.size, 0)
 

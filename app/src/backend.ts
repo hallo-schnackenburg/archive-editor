@@ -90,6 +90,13 @@ export interface SessionRef {
   owner?: string
 }
 
+/** The branch is further than the saved-from commit (`base`): somebody else's work has to be looked at, and merged, before saving. */
+export class StaleBranch extends Error {
+  constructor() {
+    super('Der Branch hat sich geändert.')
+  }
+}
+
 /** What a save leaves behind: the session's pull request (if there is one) and the branch's new commit (if anything changed). */
 export interface SaveResult {
   pull?: Pull
@@ -114,9 +121,10 @@ export interface Backend {
   me(): Promise<User | undefined>
   /**
    * Puts the objects (id and YAML text) into one commit on the session's branch and removes the deleted
-   * ones from it. Returns the pull request of the session, if there is one.
+   * ones from it. Returns the pull request of the session, if there is one. With `base` (the commit of the branch that
+   * was seen) nothing is written if the branch is further: it throws `StaleBranch`.
    */
-  save(session: SessionRef, objects: SavedObject[], deleted: Removed[]): Promise<SaveResult>
+  save(session: SessionRef, objects: SavedObject[], deleted: Removed[], base?: string): Promise<SaveResult>
   /** Marks the pull request of the session as ready for review. */
   submit(session: SessionRef): Promise<Pull>
   /** Gives the pull request of the session its new name, if it has one. */
@@ -188,19 +196,23 @@ export class HttpBackend implements Backend {
     return (await response.json()) as User
   }
 
-  async save(session: SessionRef, objects: SavedObject[], deleted: Removed[]): Promise<SaveResult> {
+  async save(session: SessionRef, objects: SavedObject[], deleted: Removed[], base?: string): Promise<SaveResult> {
     let pull: Pull | undefined
     let head: string | undefined
+    let seen = base
     for (let o = 0, d = 0; o < objects.length || d < deleted.length; o += MAX_PER_SAVE, d += MAX_PER_SAVE) {
       const response = await request(`${this.#url}/repo/save`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ session, objects: objects.slice(o, o + MAX_PER_SAVE), deleted: deleted.slice(d, d + MAX_PER_SAVE) }),
+        body: JSON.stringify({ session, objects: objects.slice(o, o + MAX_PER_SAVE), deleted: deleted.slice(d, d + MAX_PER_SAVE), ...(seen ? { base: seen } : {}) }),
       })
-      const data = await jsonOf<{ pull?: Pull; commit?: string | null }>(response)
+      const data = await jsonOf<{ pull?: Pull; commit?: string | null; stale?: boolean }>(response)
+      if (response.status === 409 && data.stale) throw new StaleBranch()
       if (!response.ok) throw new Error(data.error ?? `Fehler ${response.status}`)
       pull = data.pull ?? pull
       head = data.commit ?? head
+      // The next part goes on top of what this one wrote.
+      if (data.commit) seen = data.commit
     }
     return { pull, head }
   }
@@ -378,8 +390,9 @@ export class FakeBackend implements Backend {
   /** Whose branch a session is, when it is not the signed-in person's (for tests of sessions that somebody else started). */
   owners = new Map<string, string>()
 
-  async save(session: SessionRef, objects: SavedObject[], deleted: Removed[]): Promise<SaveResult> {
+  async save(session: SessionRef, objects: SavedObject[], deleted: Removed[], base?: string): Promise<SaveResult> {
     await sleep(150)
+    if (base && this.heads.has(session.slug) && base !== `fake-${this.heads.get(session.slug)}`) throw new StaleBranch()
     if (objects.some((o) => /failsave/.test(o.text))) throw new Error('Speichern fehlgeschlagen (Test).')
     if (this.closed) {
       this.submitted.delete(session.slug)
@@ -433,10 +446,11 @@ export class FakeBackend implements Backend {
     const content = await this.erfassung(number)
     const slug = [...this.branches.keys()].find((s) => this.#pullOf(s).number === number)
     const head = `fake-${this.heads.get(slug ?? '') ?? 0}`
-    if (since && since === head) return { head, pull: this.#pullOf(slug ?? ''), mergeable: true, checks: 'unknown', objects: [], unchanged: true }
+    const pull = { ...this.#pullOf(slug ?? ''), merged: this.merged, state: this.merged || this.closed ? ('closed' as const) : ('open' as const) }
+    if (since && since === head) return { head, pull, mergeable: true, checks: 'unknown', objects: [], unchanged: true }
     return {
       head,
-      pull: { ...this.#pullOf(slug ?? ''), merged: this.merged, state: this.merged || this.closed ? 'closed' : 'open' },
+      pull,
       mergeable: true,
       checks: 'none',
       objects: content.objects.map((o) => ({ id: o.id, status: 'added' as const, text: o.text })),

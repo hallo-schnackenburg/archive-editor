@@ -376,15 +376,18 @@ export class ReviewDb {
     }
   }
 
-  /** Does what was chosen with the session that is looked at. */
-  async act(action: Action): Promise<boolean> {
+  /**
+   * Does what was chosen with the session that is looked at. `head` is the commit the person has seen (the work space knows it);
+   * accepting fails if the branch is further. Without it, the commit of the loaded detail counts.
+   */
+  async act(action: Action, head?: string): Promise<boolean> {
     const detail = this.detail
     const pull = this.selectedPull
     if (!detail || pull === undefined || this.acting) return false
     this.acting = action
     this.actionError = ''
     try {
-      if (action === 'merge') await this.#backend.merge(pull, detail.head)
+      if (action === 'merge') await this.#backend.merge(pull, head ?? detail.head)
       else await this.#backend.reject(pull)
       await this.refresh()
       await this.#load(pull)

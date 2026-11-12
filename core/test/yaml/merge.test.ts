@@ -68,6 +68,6 @@ describe('mergeObject', () => {
 
   it('does not merge a text that cannot be read', () => {
     const broken = 'title: [unclosed\n'
-    expect(mergeObject(base, broken, base.replace('note: alt', 'note: neu'))).toEqual({ text: broken, conflicts: [], taken: [] })
+    expect(mergeObject(base, broken, base.replace('note: alt', 'note: neu'))).toEqual({ text: broken, conflicts: [], taken: [], unreadable: true })
   })
 })

@@ -9,7 +9,8 @@
 //   GET  /live    a WebSocket on which the browser hears that the archive changed (hub.ts).
 //   /repo/*       saves objects to the data repository and opens the pull request (repo.ts).
 //
-// NOT YET THERE (needed before this is deployed for others): a limit per person and a spending cap.
+// NOT YET THERE (needed before this is deployed for others): a limit per person. Until then the spending cap has to be set
+// in the Anthropic workspace and at the bucket's provider.
 
 import { resolveGeocodes, type GeocodeEnv } from './geocode.js'
 import { BadRequest, buildModelRequest, parseChatRequest, toToolCalls } from './chat.js'
@@ -69,8 +70,14 @@ export async function handle(
   if (auth) return auth
 
   // Everything else is for a signed-in person only. A renewed token goes back to the browser as a new cookie.
-  const signed = await readSession(request, env, fetchFn)
+  const signed = await readSession(request, env, fetchFn, { renew: route !== '/live' })
   if (!signed) return json({ error: 'Nicht angemeldet.' }, 401, env)
+  // A request that changes something must come from our own app: a page of another origin (also another subdomain) is refused.
+  // Without an Origin header it is not a browser page (the cookie is needed anyway).
+  const origin = request.headers.get('origin')
+  if (!['GET', 'HEAD'].includes(request.method) && origin && origin !== env.ALLOWED_ORIGIN && origin !== new URL(request.url).origin) {
+    return json({ error: 'Wrong origin.' }, 403, env)
+  }
   const response = await signedRoute(request, route, signed.session, env, fetchFn, pause)
   // (The headers of a WebSocket's response cannot be changed; the next request renews the cookie.)
   if (signed.cookie && response.status !== 101) response.headers.append('set-cookie', signed.cookie)

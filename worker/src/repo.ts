@@ -30,7 +30,7 @@
 
 import { objectPath, parseObjectId } from '@tamandua/core/paths'
 import { SNAPSHOT_BRANCH, SNAPSHOT_FILE } from '@tamandua/core/snapshot'
-import { GitHubError, Repo, type Checks, type ChangedFile, type GithubEnv, type ListedPull, type RawComment } from './github.js'
+import { GitHubError, OBJECT_FILE, Repo, type Checks, type ChangedFile, type GithubEnv, type ListedPull, type RawComment } from './github.js'
 import { objectUrl } from './s3.js'
 import { s3Config, type UploadEnv } from './upload.js'
 import type { Auth } from './session.js'
@@ -77,6 +77,8 @@ export interface Saved {
   /** The label of each removed path, for the commit message. */
   removedLabels: Record<string, string>
   removals: string[]
+  /** The commit of the branch the caller has seen: if the branch is further, nothing is saved (409). */
+  base?: string
 }
 
 export interface Note {
@@ -145,7 +147,9 @@ export function parseSave(data: unknown): Saved | Failure {
     removals.push(objectPath(id))
     removedLabels[objectPath(id)] = labelOf(id, raw && typeof raw === 'object' && typeof raw.title === 'string' ? raw.title : undefined)
   }
-  return { session, files, removals, notes, removedLabels }
+  const base = (data as { base?: unknown } | null)?.base
+  if (base !== undefined && (typeof base !== 'string' || !COMMIT.test(base))) return { error: '"base" must be a commit.', status: 400 }
+  return { session, files, removals, notes, removedLabels, ...(base ? { base } : {}) }
 }
 
 /** "Dachbodenfund Postkarten (Anna Beispiel, 07.11.2026, 23:47)": the session and when its pull request was opened, in Berlin time. */
@@ -234,7 +238,6 @@ export interface ErfassungObject {
   status: 'added' | 'modified' | 'removed'
 }
 
-const OBJECT_FILE = /^objects\/[0-9A-HJKMNP-TV-Z]\/[0-9A-HJKMNP-TV-Z]\/([0-9A-HJKMNP-TV-Z]{26})\.yaml$/
 
 export function objectsOf(files: { filename: string; status: string }[]): ErfassungObject[] {
   const objects: ErfassungObject[] = []
@@ -379,7 +382,7 @@ export async function handleRepo(request: Request, route: string, user: Auth, en
       if (data instanceof Response) return data
       const parsed = parseSave(data)
       if ('error' in parsed) return json({ error: parsed.error }, parsed.status)
-      const { session, files, removals, notes, removedLabels } = parsed
+      const { session, files, removals, notes, removedLabels, base } = parsed
       const branch = branchOf(session.owner ?? user.login, session.slug)
 
       // A submitted session can still be changed (also while it is being reviewed): its pull request is the same.
@@ -387,6 +390,7 @@ export async function handleRepo(request: Request, route: string, user: Auth, en
 
       const commit = await repo.save(branch, files, removals, (removed) =>
         messageOf(session.name, [...notes, ...removed.map((path): Note => ({ mark: '-', label: removedLabels[path] }))]),
+        base,
       )
       // The pull request is a convenience: if it cannot be opened now, the save still counts.
       const pull =
@@ -443,11 +447,11 @@ export async function handleRepo(request: Request, route: string, user: Auth, en
       if (typeof text !== 'string') return json({ error: text.error }, text.status)
       // What the comment is about stays: it is read from the comment itself.
       const before = splitComment((await repo.issueComment(Number(one_comment[1]))).body ?? '')
-      const changed = await repo.editComment(Number(one_comment[1]), joinComment(text, before.object, before.field))
+      const changed = await repo.editComment(Number(one_comment[1]), joinComment(text, before.object, before.field), user.login)
       return json({ comment: commentsOf({ issue: [changed], review: [] })[0] })
     }
     if (one_comment && request.method === 'DELETE') {
-      await repo.deleteComment(Number(one_comment[1]))
+      await repo.deleteComment(Number(one_comment[1]), user.login)
       return json({ deleted: true })
     }
 
@@ -495,6 +499,8 @@ export async function handleRepo(request: Request, route: string, user: Auth, en
       // Without a token that works any more the app has to sign in again; everything else is passed on as a message.
       if (error.status === 401) return json({ error: 'Not signed in.' }, 401)
       if (error.status === 409 && ['/repo/submit', '/repo/merge', '/repo/close'].includes(route)) return json({ error: error.message }, 409)
+      // The branch is further than the caller saw: it has to look again (and merge) before it saves.
+      if (error.status === 409 && route === '/repo/save') return json({ error: error.message, stale: true }, 409)
       if (error.status === 404 && (error.message === 'Das ist keine Erfassung.' || error.message === 'Das ist kein Kommentar zu einer Erfassung.')) return json({ error: error.message }, 404)
       if (error.status === 403 && route.startsWith('/repo/comment/')) return json({ error: 'Das darf nur, wer den Kommentar geschrieben hat.' }, 403)
       return json({ error: `GitHub answered with an error (${error.status}): ${error.message}`.slice(0, 300) }, 502)

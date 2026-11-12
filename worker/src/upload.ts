@@ -23,6 +23,8 @@ export interface UploadItem {
 
 export type UploadAnswer =
   | { path: string; exists: true }
+  /** Something else is stored under this path (another size): it is never signed over, a path holds one content only. */
+  | { path: string; exists: true; conflict: true }
   | { path: string; exists: false; url: string; headers: Record<string, string> }
 
 /** One signed PUT takes up to 5 GB at Hetzner; scans and photos stay far below this. */
@@ -61,25 +63,28 @@ export function s3Config(env: UploadEnv): S3Config | null {
 }
 
 /**
- * Is the file in the bucket already, with the size we expect? A path holds one content only (it contains the hash).
+ * Is the file in the bucket already? `same` if it has the size we expect, `other` if it has another one (a path holds one
+ * content only, it contains the hash: a different size means something is wrong, and it must not be written over).
  * Asks with GET, not HEAD: in the deployed Worker the request passes through Cloudflare, which turns a HEAD into a
  * GET towards the bucket, and then the signature (made for HEAD) no longer fits and the bucket answers 403.
  * The body is never read; cancelling it keeps the file from being transferred.
  */
-async function isThere(config: S3Config, item: UploadItem, fetchFn: typeof fetch): Promise<boolean> {
+async function isThere(config: S3Config, item: UploadItem, fetchFn: typeof fetch): Promise<'none' | 'same' | 'other'> {
   const url = await presign(config, { method: 'GET', key: item.path, expires: 60 })
   const response = await fetchFn(url)
   await response.body?.cancel()
-  if (response.status === 404) return false
+  if (response.status === 404) return 'none'
   if (!response.ok) throw new Error(`The bucket answered ${response.status}.`)
   const length = response.headers.get('content-length')
-  return length === null || Number(length) === item.bytes
+  return length === null || Number(length) === item.bytes ? 'same' : 'other'
 }
 
 export async function planUpload(items: UploadItem[], config: S3Config, fetchFn: typeof fetch = fetch): Promise<UploadAnswer[]> {
   return Promise.all(
     items.map(async (item): Promise<UploadAnswer> => {
-      if (await isThere(config, item, fetchFn)) return { path: item.path, exists: true }
+      const there = await isThere(config, item, fetchFn)
+      if (there === 'same') return { path: item.path, exists: true }
+      if (there === 'other') return { path: item.path, exists: true, conflict: true }
       // The content type is signed: the browser has to send exactly this one.
       const headers = { 'content-type': item.mime }
       const url = await presign(config, { method: 'PUT', key: item.path, expires: URL_LIFETIME, headers })

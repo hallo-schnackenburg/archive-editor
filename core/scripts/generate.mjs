@@ -65,6 +65,12 @@ export function read(yamlText) {
     }
     types[type] = { ...entry, subtypes }
   }
+  // The definitions of a type and the ones of the building blocks share one namespace in the schema.
+  const reserved = new Set(['common', 'stored_here', ...Object.keys(isRecord(data.defs) ? data.defs : {})])
+  for (const [type, entry] of Object.entries(types)) {
+    if (reserved.has(type) || reserved.has(`${type}_files`) || Object.keys(types).some((other) => `${other}_files` === type)) fail(`object_types.${type}: this name is already used by a definition of the schema.`)
+    if (entry.files) reserved.add(`${type}_files`)
+  }
   const fields = data.fields
   if (!isRecord(fields) || !['id', 'type', 'title'].every((f) => isRecord(fields[f]))) fail('fields must at least have id, type and title.')
   for (const [field, spec] of Object.entries(fields)) if (!NAME.test(field) || !isRecord(spec.schema)) fail(`fields.${field} needs a schema.`)
@@ -95,7 +101,11 @@ export function schemaOf(model) {
     },
   }
   for (const [type, t] of grouped) {
-    $defs[type] = { description: t.description, properties: { files: false, storage: false, external: false } }
+    // A type without files has no storage of its own either; its own fields (if any) are added to that.
+    $defs[type] = {
+      description: t.description,
+      properties: { files: false, storage: false, external: false, ...Object.fromEntries(Object.entries(t.fields ?? {}).map(([name, spec]) => [name, clean(spec.schema)])) },
+    }
   }
   $defs.stored_here = {
     description: 'The content lives in our object store (storage: local, the default): the files are the object.',
@@ -104,7 +114,7 @@ export function schemaOf(model) {
     allOf: stored.map(([type]) => ({ ...isType(type), then: { properties: { files: ref(`${type}_files`) } } })),
   }
   $defs.stored_elsewhere = clean(defs.stored_elsewhere)
-  for (const [type, t] of withFields) {
+  for (const [type, t] of withFields.filter(([, t]) => t.files)) {
     $defs[type] = { properties: Object.fromEntries(Object.entries(t.fields).map(([name, spec]) => [name, clean(spec.schema)])) }
   }
   for (const [type, t] of stored) {
@@ -124,10 +134,10 @@ export function schemaOf(model) {
     then: ref('stored_elsewhere'),
     else: ref('stored_here'),
   }
-  const allOf = [ref('common')]
-  if (grouped.length === 1) allOf.push({ ...isType(grouped[0][0]), then: ref(grouped[0][0]), else: storage })
-  else allOf.push(storage)
-  for (const [type] of withFields) allOf.push({ ...isType(type), then: ref(type) })
+  // Types without files first (each has its rules), then the rest by where its content lives.
+  const chain = grouped.reduceRight((rest, [type]) => ({ ...isType(type), then: ref(type), else: rest }), storage)
+  const allOf = [ref('common'), chain]
+  for (const [type] of withFields.filter(([, t]) => t.files)) allOf.push({ ...isType(type), then: ref(type) })
 
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',

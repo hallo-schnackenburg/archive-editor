@@ -49,9 +49,11 @@ describe('POST /upload', () => {
     expect(files.map((f) => f.exists)).toEqual([true, false])
   })
 
-  it('uploads again when the stored file has another size', async () => {
+  it('never signs over a stored file that has another size: that is a conflict', async () => {
     const response = await handle(post({ files: [item] }), env, asFetch(bucket({ [original]: 999 })))
-    expect(((await response.json()) as { files: { exists: boolean }[] }).files[0].exists).toBe(false)
+    const { files } = (await response.json()) as { files: { exists: boolean; conflict?: boolean; url?: string }[] }
+    expect(files[0]).toEqual({ path: original, exists: true, conflict: true })
+    expect(files[0].url).toBeUndefined()
   })
 
   it('refuses paths, types and sizes it should not sign', async () => {

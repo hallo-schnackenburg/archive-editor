@@ -19,6 +19,12 @@ export async function request(url: string, init?: RequestInit): Promise<Response
   let response: Response
   try {
     response = await fetch(url, init)
+    // Two calls at the same moment may both try to renew the session; one of them loses and gets a 401, though the
+    // other has already brought the new cookie. Once more, a moment later, tells the two cases apart (nothing was done by a 401).
+    if (response.status === 401) {
+      await new Promise((resolve) => setTimeout(resolve, 400))
+      response = await fetch(url, init)
+    }
   } catch {
     throw new Error('Der Server ist nicht erreichbar. Läuft der Worker (npm run dev:worker)?')
   }
