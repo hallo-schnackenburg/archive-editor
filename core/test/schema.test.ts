@@ -254,7 +254,9 @@ describe('groups', () => {
     expect(messages(photo(), (o) => (o.parents = []))[0]).toMatch(/^\/parents: /)
   })
 
-  it('take any subtype, as every object does', () => expect(messages(album(), (o) => (o.subtype = 'scrapbook'))).toEqual([]))
+  it('take a subtype listed for groups', () => expect(messages(album(), (o) => (o.subtype = 'collection'))).toEqual([]))
+
+  it('refuse any other subtype', () => expect(messages(album(), (o) => (o.subtype = 'scrapbook'))[0]).toMatch(/^\/subtype: /))
 })
 
 describe('origin and subjects', () => {

@@ -61,6 +61,76 @@
       "then": {
         "$ref": "#/$defs/document"
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "image"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "subtype": {
+            "enum": [
+              "photo",
+              "drawing",
+              "print",
+              "plan"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "document"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "subtype": {
+            "enum": [
+              "letter",
+              "note",
+              "protocol",
+              "brochure"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "group"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "subtype": {
+            "enum": [
+              "album",
+              "collection"
+            ]
+          }
+        }
+      }
     }
   ],
   "unevaluatedProperties": false,

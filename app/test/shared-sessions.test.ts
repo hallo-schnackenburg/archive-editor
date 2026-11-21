@@ -202,3 +202,52 @@ describe('sessions of somebody else', () => {
     expect(backend.branches.get('annas-fund')?.get(ID)).toBe(text('Geändert'))
   })
 })
+
+describe('previews', () => {
+  const entry = { role: 'main', sha256: 'a'.repeat(64), path: 'files/aa/a/original.jpg', mime: 'image/jpeg', bytes: 15_000_000, variants: [{ kind: 'preview', path: 'files/aa/a/preview-400.jpg' }] }
+  const record = (over: object = {}) => ({ sha256: 'a'.repeat(64), name: 'x.jpg', bytes: 15_000_000, entry, status: 'uploaded' as const, addedAt: 1, ...over })
+
+  it('missing for an uploaded file are fetched from the bucket, the preview and never the big original', async () => {
+    const { backend, ws } = setup()
+    ws.login = { state: 'user', user: { login: 'test', name: 'Test', avatar: '', role: 'write', files: 'https://bucket.example' } }
+    const asked: string[] = []
+    backend.fetchFile = async (base, path) => (asked.push(`${base}/${path}`), new Blob(['x']))
+    ws.files = [record()]
+    ws.repairPreviews()
+    await vi.waitFor(() => expect(ws.files[0].preview).toBeDefined())
+    expect(asked).toEqual(['https://bucket.example/files/aa/a/preview-400.jpg'])
+  })
+
+  it('are not fetched for a big image that has no preview of its own', async () => {
+    const { backend, ws } = setup()
+    ws.login = { state: 'user', user: { login: 'test', name: 'Test', avatar: '', role: 'write', files: 'https://bucket.example' } }
+    const asked: string[] = []
+    backend.fetchFile = async (base, path) => (asked.push(path), new Blob(['x']))
+    ws.files = [record({ entry: { ...entry, variants: undefined } })]
+    ws.repairPreviews()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(asked).toEqual([])
+  })
+})
+
+describe('renaming a session', () => {
+  it('shows the new name at once and tells GitHub', async () => {
+    const { backend, ws } = setup()
+    const session = ws.createSession('Alt')
+    session.pull = 7
+    const rename = vi.spyOn(backend, 'rename')
+    await ws.renameSession(session.id, 'Neu')
+    expect(session.name).toBe('Neu')
+    expect(rename).toHaveBeenCalledOnce()
+  })
+
+  it('tells when GitHub could not be told', async () => {
+    const { backend, ws } = setup()
+    const session = ws.createSession('Alt')
+    session.pull = 7
+    vi.spyOn(backend, 'rename').mockRejectedValue(new Error('kaputt'))
+    await ws.renameSession(session.id, 'Neu')
+    expect(session.name).toBe('Neu')
+    expect(ws.chat.some((m) => m.text.includes('konnte nicht an GitHub gemeldet werden'))).toBe(true)
+  })
+})

@@ -13,7 +13,8 @@ import { newEmptyText, newObjectText } from './template.js'
 import { validityOf } from './validity.js'
 import type { FileStore } from './uploader.js'
 import { SignedOut } from './api.js'
-import { StaleBranch, type Backend, type Removed, type SaveResult, type RemoteContent, type RemoteErfassung, type SessionRef, type User } from './backend.js'
+import { Sync } from './sync.svelte.js'
+import { type Backend, type Removed, type RemoteContent, type RemoteErfassung, type SessionRef, type User } from './backend.js'
 
 /** A file that was dropped and hashed. It is identified by its SHA-256. */
 export interface FileRecord {
@@ -86,11 +87,6 @@ export type Login =
  * created, the agent set fields, files were moved; one commit per answer of the agent), 30 seconds after
  * the last change the person typed in the editor, and a minute after a failure.
  */
-const APP_DELAY = 1_000
-const TYPING_DELAY = 30_000
-const SYNC_RETRY = 60_000
-/** How long a save is shown at least. */
-const MIN_SAVING = 500
 
 /** A file that is still being hashed, or could not be read. */
 export interface Pending {
@@ -208,6 +204,9 @@ export function slugify(name: string): string {
 export const defaultName = (): string =>
   `Erfassung vom ${new Date().toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: '2-digit', month: '2-digit', year: 'numeric' })}`
 
+/** The size up to which an image without a preview variant is fetched as its own preview. */
+const SMALL_IMAGE = 1_500_000
+
 const cleanName = (name: string): string => name.replace(/\s+/g, ' ').trim().slice(0, 100)
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'de', { numeric: true })
@@ -247,24 +246,11 @@ export class Workspace {
 
   /** Who is signed in. */
   login = $state<Login>({ state: 'loading' })
-  /** Saving to GitHub: `failed` is shown to the person, with the reason in `syncError`. */
-  syncState = $state<'idle' | 'saving' | 'failed'>('idle')
-  syncError = $state<string>()
-  /** The sessions and objects a save is running for right now, and the sessions whose last save failed. */
-  savingSessions = $state<string[]>([])
-  savingObjects = $state<string[]>([])
-  failedSessions = $state<string[]>([])
-  /** True while the pull request is being opened. */
-  submitting = $state(false)
-
   #store: FileStore
   #agent: Agent
   #backend: Backend
-  #appTimer: ReturnType<typeof setTimeout> | undefined
-  #typingTimer: ReturnType<typeof setTimeout> | undefined
+  #sync: Sync
   #removedFiles = new Set<string>()
-  #syncing = false
-  #syncAgain = false
   #anchor: string | undefined
   #queue: { file: File; batch: Batch }[] = []
   #batches = new Set<Batch>()
@@ -282,7 +268,43 @@ export class Workspace {
     this.#store = store
     this.#agent = agent
     this.#backend = backend
+    const ws = this
+    this.#sync = new Sync({
+      backend,
+      get login() { return ws.login },
+      get objects() { return ws.objects },
+      get sessions() { return ws.sessions },
+      get current() { return ws.current },
+      get shown() { return ws.shown },
+      get unsaved() { return ws.unsaved },
+      ref: (session) => this.#ref(session),
+      refer,
+      touchObject: (id) => this.#dirtyObjects.add(id),
+      touchSession: (id) => this.#dirtySessions.add(id),
+      schedule: () => this.#schedule(),
+      say: (role, text) => this.#say(role, text),
+      add: (name) => this.#add(name),
+      ensureOpen: (show) => this.#ensureOpen(show),
+      mergeRemote: (session, remote, filesBase, complete) => this.mergeRemote(session, remote, filesBase, complete),
+    })
   }
+
+  // --- saving to GitHub lives in Sync; these are its parts as the components know them ---
+
+  get syncState() { return this.#sync.syncState }
+  get syncError() { return this.#sync.syncError }
+  get savingSessions() { return this.#sync.savingSessions }
+  get savingObjects() { return this.#sync.savingObjects }
+  get failedSessions() { return this.#sync.failedSessions }
+  get submitting() { return this.#sync.submitting }
+  sync(): Promise<boolean> { return this.#sync.sync() }
+  submit(): Promise<void> { return this.#sync.submit() }
+  /** The person turns to something else: what was typed so far is saved now. */
+  leave() { this.#sync.leave() }
+  pullSession(session: Session): Promise<void> { return this.#sync.pullSession(session) }
+  settle(session: Session): Promise<boolean> { return this.#sync.settle(session) }
+  align(list: RemoteErfassung[]) { this.#sync.align(list) }
+  checkPulls(): Promise<void> { return this.#sync.checkPulls() }
 
   /**
    * The objects a chat message is about: those of the selected files, and the open object if it has no files
@@ -471,7 +493,7 @@ export class Workspace {
     this.#markUi()
   }
 
-  renameSession(id: string, name: string) {
+  async renameSession(id: string, name: string): Promise<void> {
     const session = this.sessions.find((s) => s.id === id)
     name = cleanName(name)
     if (!session || !name || name === session.name) return
@@ -479,9 +501,13 @@ export class Workspace {
     session.auto = undefined // the person named it: it stays
     this.#dirtySessions.add(id)
     this.#schedule()
-    // The pull request carries the name too (it is how the session is found again). Best effort: it is renamed with the next try.
+    // The pull request carries the name too (it is how the session is found again).
     if (this.login.state === 'user' && session.state !== 'merged' && (session.pull || this.objects.some((o) => o.sessionId === id && o.synced !== undefined))) {
-      void this.#backend.rename(this.#ref(session)).catch(() => undefined)
+      try {
+        await this.#backend.rename(this.#ref(session))
+      } catch (error) {
+        if (!(error instanceof SignedOut)) this.#say('status', `Der neue Name „${name}“ konnte nicht an GitHub gemeldet werden: ${(error as Error).message}`)
+      }
     }
   }
 
@@ -562,6 +588,17 @@ export class Workspace {
     this.#ensureOpen(false)
     if (!this.current) this.currentId = [...this.sessions].reverse().find(mineOpen)?.id ?? this.sessions[this.sessions.length - 1]?.id
     this.#markUi()
+    this.repairPreviews()
+  }
+
+  /**
+   * Files that are in the bucket but have no preview here (the browser did not keep it, or it was not there when the session was
+   * taken over) get it from the bucket. Without a bucket address, or for files that are not uploaded yet, nothing happens.
+   */
+  repairPreviews() {
+    const base = this.filesBase
+    if (!base) return
+    for (const file of this.files) if (!file.preview && file.status === 'uploaded') void this.#loadPreview(file.sha256, base, file.entry)
   }
 
   /**
@@ -672,6 +709,8 @@ export class Workspace {
           known.objectId = objectId
           this.#dirtyFiles.add(sha256)
         }
+        // A first try that failed (no connection, bucket not reachable then) is made again whenever the session is looked at.
+        if (!known.preview && base && known.status === 'uploaded') void this.#loadPreview(sha256, base, entry)
         continue
       }
       const name = typeof entry.original_name === 'string' ? entry.original_name : sha256.slice(0, 12)
@@ -767,7 +806,9 @@ export class Workspace {
   /** The preview of a restored file, from the bucket: its preview variant, or the file itself if it is an image that small. */
   async #loadPreview(sha256: string, base: string, entry: FileEntry) {
     const variants = Array.isArray(entry.variants) ? (entry.variants as { kind?: string; path?: string }[]) : []
-    const path = variants.find((v) => v.kind === 'preview')?.path ?? (typeof entry.mime === 'string' && entry.mime.startsWith('image/') ? entry.path : undefined)
+    // Without a preview of its own a small image is its own preview; a big one is not fetched for that.
+    const small = typeof entry.bytes === 'number' && entry.bytes <= SMALL_IMAGE
+    const path = variants.find((v) => v.kind === 'preview')?.path ?? (small && typeof entry.mime === 'string' && entry.mime.startsWith('image/') ? entry.path : undefined)
     if (typeof path !== 'string') return
     const blob = await this.#backend.fetchFile(base, path)
     const file = this.files.find((f) => f.sha256 === sha256)
@@ -1175,14 +1216,14 @@ export class Workspace {
     this.#dirtyObjects.delete(object.id)
     this.#removedObjects.add(object.id)
     const session = this.#sessionOf(object)
-    if (session && (object.synced !== undefined || this.#syncing)) {
+    if (session && (object.synced !== undefined || this.#sync.running)) {
       const title = readField(object.text, 'title')
       session.deleted.push({ id: object.id, title: typeof title === 'string' ? title : undefined })
       this.#dirtySessions.add(session.id)
     }
     this.#say('log', `Objekt ${object.number} gelöscht.`)
     this.#schedule()
-    this.#syncAfterApp()
+    this.#sync.afterApp()
   }
 
   // --- chat: the user writes, the agent answers with tool calls, the workspace carries them out ---
@@ -1526,7 +1567,7 @@ export class Workspace {
     object.updatedAt = Date.now()
     this.#dirtyObjects.add(object.id)
     this.#schedule()
-    this.#syncAfterTyping()
+    this.#sync.afterTyping()
   }
 
   // --- saving: shortly after the last change, and at once when the tab is left ---
@@ -1550,7 +1591,7 @@ export class Workspace {
   #markObject(id: string) {
     this.#dirtyObjects.add(id)
     this.#schedule()
-    this.#syncAfterApp()
+    this.#sync.afterApp()
   }
 
   #schedule() {
@@ -1624,7 +1665,7 @@ export class Workspace {
       this.login = user ? { state: 'user', user } : { state: 'anonymous', notice }
       if (user) {
         void this.#begin()
-        this.#syncAfterApp()
+        this.#sync.afterApp()
         void this.checkPulls()
       }
     } catch (error) {
@@ -1635,14 +1676,14 @@ export class Workspace {
   /** The server says the session is over. What is in the browser stays. */
   signedOut() {
     if (this.login.state === 'anonymous') return
-    this.#stopTimers()
+    this.#sync.stopTimers()
     this.#started = false
     this.login = { state: 'anonymous', notice: 'Deine Sitzung ist abgelaufen. Bitte melde dich neu an.' }
   }
 
   async logout() {
     await this.#backend.logout()
-    this.#stopTimers()
+    this.#sync.stopTimers()
     this.#dropAuto()
     this.#started = false
     this.login = { state: 'anonymous' }
@@ -1659,40 +1700,9 @@ export class Workspace {
     return session?.state === 'submitted' ? 'submitted' : 'saved'
   }
 
-  #typingPending = false
-
-  #stopTimers() {
-    clearTimeout(this.#appTimer)
-    clearTimeout(this.#typingTimer)
-    this.#typingPending = false
-  }
-
-  /**
-   * The person turns to something else (another object, another session, another window): what was typed so far
-   * is saved now and not after the quiet half minute.
-   */
-  leave() {
-    if (this.#typingPending) void this.sync()
-  }
-
-  /** The app changed something: save in a second (the changes of one answer go into one commit). */
-  #syncAfterApp() {
-    if (this.login.state !== 'user') return
-    clearTimeout(this.#appTimer)
-    this.#appTimer = setTimeout(() => void this.sync(), APP_DELAY)
-  }
-
-  /** The person typed: save when it has been quiet for a while, or earlier if the app saves anyway. */
-  #syncAfterTyping(delay = TYPING_DELAY) {
-    if (this.login.state !== 'user') return
-    clearTimeout(this.#typingTimer)
-    this.#typingPending = delay === TYPING_DELAY
-    this.#typingTimer = setTimeout(() => void this.sync(), delay)
-  }
-
   /** Clears everything stored in the browser and starts again. What is on GitHub and in the bucket stays. */
   async resetAll() {
-    this.#stopTimers()
+    this.#sync.stopTimers()
     await db.reset()
     location.reload()
   }
@@ -1708,257 +1718,5 @@ export class Workspace {
       return true
     }
     return false
-  }
-
-  /** Saves every open session: its changed objects in one commit on its branch, and removes what was deleted. Returns whether everything is saved. */
-  async sync(): Promise<boolean> {
-    this.#stopTimers()
-    if (this.login.state !== 'user') return false
-    if (this.#syncing) {
-      this.#syncAgain = true
-      return false
-    }
-    const pending = (session: Session) => this.objects.filter((o) => o.sessionId === session.id && o.text !== o.synced).map((object) => ({ object, text: object.text }))
-    const work = this.sessions.filter((s) => s.state !== 'merged' && (pending(s).length > 0 || s.deleted.length > 0))
-    // A session with nothing left to save has nothing that failed (e.g. the change was undone).
-    this.failedSessions = this.failedSessions.filter((id) => work.some((session) => session.id === id))
-    if (work.length === 0) {
-      if (this.syncState === 'failed') this.syncState = 'idle'
-      this.syncError = undefined
-      return true
-    }
-
-    this.#syncing = true
-    this.syncState = 'saving'
-    let ok = false
-    let failure: Error | undefined
-    let signedOut = false
-    for (const session of work) {
-      const started = Date.now()
-      let todo: { object: ObjectRecord; text: string }[] = []
-      let deleted: Removed[] = []
-      this.savingSessions.push(session.id)
-      try {
-        // First what happened on the branch meanwhile (somebody else's changes, also those made on GitHub), so that nothing is
-        // overwritten; the save names the commit it was made from, and if the branch moved on in between, it is looked at again.
-        let result: SaveResult | undefined
-        for (let attempt = 0; ; attempt++) {
-          let seenHead: string | undefined
-          let held: string[] = []
-          if (session.pull) {
-            const seen = await this.#backend.review(session.pull, attempt > 0 ? undefined : session.head)
-            if (seen.pull.merged) {
-              // Accepted meanwhile: what is still only here goes into a new session, nothing is written to the finished one.
-              this.#markMerged(session)
-              break
-            }
-            if (!seen.unchanged) held = this.mergeRemote(session, seen.objects, seen.files, seen.head !== session.head).held
-            seenHead = seen.head
-            if (held.length === 0) session.head = seen.head
-          }
-          todo = pending(session).filter(({ object }) => !held.includes(object.id))
-          deleted = [...session.deleted]
-          if (todo.length === 0 && deleted.length === 0) break
-          try {
-            result = await this.#backend.save(this.#ref(session), todo.map(({ object, text }) => ({ id: object.id, text, change: object.synced === undefined ? ('new' as const) : ('changed' as const) })), deleted, seenHead)
-          } catch (error) {
-            if (error instanceof StaleBranch && attempt < 2) continue
-            throw error
-          }
-          if (held.length === 0 && result.head) session.head = result.head
-          break
-        }
-        this.savingObjects.push(...todo.map(({ object }) => object.id))
-        if (!result) continue
-        const pull = result.pull
-        for (const { object, text } of todo) {
-          object.synced = text
-          this.#dirtyObjects.add(object.id)
-        }
-        session.deleted = session.deleted.filter((entry) => !deleted.some((d) => d.id === entry.id))
-        if (pull) {
-          session.pull = pull.number
-          session.url = pull.url
-        }
-        this.#dirtySessions.add(session.id)
-        this.failedSessions = this.failedSessions.filter((id) => id !== session.id)
-      } catch (error) {
-        if (error instanceof SignedOut) {
-          signedOut = true
-          break
-        }
-        failure ??= error as Error
-        if (!this.failedSessions.includes(session.id)) this.failedSessions.push(session.id)
-      } finally {
-        // Even a quick save shows for a moment, so that it can be seen that something happened.
-        const ids = todo.map(({ object }) => object.id)
-        setTimeout(() => {
-          const out = (list: string[], id: string) => {
-            const at = list.indexOf(id)
-            if (at >= 0) list.splice(at, 1)
-          }
-          out(this.savingSessions, session.id)
-          for (const id of ids) out(this.savingObjects, id)
-        }, Math.max(0, MIN_SAVING - (Date.now() - started)))
-      }
-    }
-    this.#schedule()
-    if (signedOut) {
-      this.syncState = 'idle'
-    } else if (failure) {
-      this.syncState = 'failed'
-      this.syncError = failure.message
-      this.#syncAfterTyping(SYNC_RETRY)
-    } else {
-      this.syncState = 'idle'
-      this.syncError = undefined
-      ok = true
-    }
-    this.#syncing = false
-    if (this.#syncAgain) {
-      this.#syncAgain = false
-      this.#syncAfterApp()
-    }
-    return ok && this.unsaved.length === 0 && !this.sessions.some((s) => s.state !== 'merged' && s.deleted.length > 0)
-  }
-
-  /** Saves what is open, then submits the shown session. Tells the person in the chat what came of it. */
-  async submit() {
-    const session = this.current
-    if (this.submitting || this.login.state !== 'user' || !session || session.state !== 'open') return
-    const objects = this.shown
-    if (objects.length === 0) return
-    this.submitting = true
-    try {
-      const open = objects.filter((o) => validateObjectYaml(o.text).length > 0)
-      if (open.length > 0) {
-        const list = open.slice(0, 3).map(refer).join(', ') + (open.length > 3 ? ', …' : '')
-        this.#say('status', `Wir können erst einreichen, wenn alle Objekte vollständig sind. Noch offen: ${list}.`)
-        return
-      }
-      // Not syncing in the middle of an edit: wait for a running save, then save the rest.
-      while (this.#syncing) await new Promise((resolve) => setTimeout(resolve, 100))
-      if (!(await this.sync())) {
-        this.#say('status', `Das Einreichen ging nicht, weil das Speichern nicht geklappt hat${this.syncError ? `: ${this.syncError}` : '.'}`)
-        return
-      }
-      if (session.state !== 'open') return // it turned out to be submitted already
-      const pull = await this.#backend.submit(this.#ref(session))
-      session.state = 'submitted'
-      session.pull = pull.number
-      session.url = pull.url
-      this.#dirtySessions.add(session.id)
-      this.#schedule()
-      const n = objects.length
-      this.#say('assistant', `Ich habe die Erfassung „${session.name}“ mit ${n === 1 ? 'einem Objekt' : `${n} Objekten`} eingereicht. Sie wird jetzt geprüft. Du kannst in einer anderen Erfassung weitermachen.`)
-      this.#ensureOpen(true)
-    } catch (error) {
-      if (!(error instanceof SignedOut)) this.#say('status', `Das Einreichen ging nicht: ${(error as Error).message}`)
-    } finally {
-      this.submitting = false
-    }
-  }
-
-  /**
-   * A session was accepted: it is final. What is still only here (changed or new objects that were not saved before it was
-   * accepted) would be lost silently, so it goes into a new session of its own, with a note in the chat.
-   */
-  #markMerged(session: Session) {
-    if (session.state === 'merged') return
-    const rest = this.objects.filter((o) => o.sessionId === session.id && o.text !== o.synced)
-    session.state = 'merged'
-    session.deleted = []
-    this.#dirtySessions.add(session.id)
-    if (rest.length > 0) {
-      const follow = this.#add(`${session.name} (Nachtrag)`)
-      for (const object of rest) {
-        object.sessionId = follow.id
-        object.synced = undefined
-        this.#dirtyObjects.add(object.id)
-      }
-      this.#say('status', `Die Erfassung „${session.name}“ wurde übernommen, während ${rest.length === 1 ? 'ein Objekt noch ungespeicherte Änderungen hatte' : `${rest.length} Objekte noch ungespeicherte Änderungen hatten`}. Sie liegen jetzt in der neuen Erfassung „${follow.name}“.`)
-    }
-    this.#schedule()
-  }
-
-  /**
-   * Looks at the branch of a session and takes over what is new there (nothing is written). Called when the session is shown or
-   * when GitHub tells that it changed. Does nothing while a save runs: that looks at the branch itself.
-   */
-  async pullSession(session: Session): Promise<void> {
-    if (this.login.state !== 'user' || !session.pull || session.state === 'merged' || this.#syncing) return
-    try {
-      const seen = await this.#backend.review(session.pull, session.head)
-      if (this.#syncing || seen.unchanged || !this.sessions.includes(session)) return
-      if (seen.pull.merged) return this.#markMerged(session)
-      const { held } = this.mergeRemote(session, seen.objects, seen.files, seen.head !== session.head)
-      if (held.length === 0) session.head = seen.head
-      this.#dirtySessions.add(session.id)
-    } catch {
-      // no connection or signed out: the next look (or the next save) does it
-    }
-  }
-
-  /** Brings everything of the session to GitHub and takes over what is new there; true if nothing is left to be saved (before accepting it, say). */
-  async settle(session: Session): Promise<boolean> {
-    while (this.#syncing) await new Promise((resolve) => setTimeout(resolve, 100))
-    const saved = await this.sync()
-    return saved && !this.objects.some((o) => o.sessionId === session.id && o.text !== o.synced)
-  }
-
-  /** Takes over how GitHub sees the sessions that are here (somebody else may have submitted, returned or accepted one). */
-  align(list: RemoteErfassung[]) {
-    for (const session of this.sessions) {
-      const remote = session.pull === undefined ? undefined : list.find((e) => e.number === session.pull)
-      if (!remote) continue
-      const state: Session['state'] = remote.state === 'merged' ? 'merged' : remote.closed ? 'open' : remote.state === 'submitted' ? 'submitted' : 'open'
-      if (state === session.state) continue
-      if (state === 'merged') {
-        this.#markMerged(session)
-        continue
-      }
-      session.state = state
-      if (remote.closed && remote.state !== 'merged') {
-        session.pull = undefined
-        session.url = undefined
-      }
-      this.#dirtySessions.add(session.id)
-    }
-    this.#schedule()
-  }
-
-  /** Looks at the pull requests that wait for review: an accepted session is final, a closed one is open again. */
-  async checkPulls() {
-    if (this.login.state !== 'user') return
-    for (const session of this.sessions.filter((s) => s.state === 'submitted' && s.pull)) {
-      try {
-        const pull = await this.#backend.pull(session.pull as number)
-        if (pull.state === 'open') {
-          if (pull.draft) {
-            // Given back by a reviewer: it is a draft again, the session goes on and can be submitted anew.
-            session.state = 'open'
-            this.#dirtySessions.add(session.id)
-            this.#schedule()
-            this.#say('status', `Die Erfassung „${session.name}“ wurde zurückgegeben. Du kannst sie überarbeiten und erneut einreichen.${session.url ? ' Anmerkungen stehen auf GitHub.' : ''}`)
-          }
-          continue
-        }
-        const n = this.objects.filter((o) => o.sessionId === session.id).length
-        if (pull.merged) {
-          this.#markMerged(session)
-          this.#say('assistant', `Die Erfassung „${session.name}“ wurde geprüft und übernommen (${n === 1 ? 'ein Objekt' : `${n} Objekte`}). Danke!`)
-        } else {
-          // Closed without being accepted: the branch is still there, the session can be revised and submitted again.
-          session.state = 'open'
-          session.pull = undefined
-          session.url = undefined
-          this.#say('status', `Die Einreichung der Erfassung „${session.name}“ wurde nicht übernommen. Du kannst sie überarbeiten und erneut einreichen.`)
-        }
-        this.#dirtySessions.add(session.id)
-        this.#schedule()
-      } catch {
-        return // no connection or signed out: next time
-      }
-    }
   }
 }

@@ -138,6 +138,11 @@ export function schemaOf(model) {
   const chain = grouped.reduceRight((rest, [type]) => ({ ...isType(type), then: ref(type), else: rest }), storage)
   const allOf = [ref('common'), chain]
   for (const [type] of withFields.filter(([, t]) => t.files)) allOf.push({ ...isType(type), then: ref(type) })
+  // Each type has its own subtypes; a type without any does not take a subtype at all.
+  for (const [type, t] of Object.entries(types)) {
+    const keys = Object.keys(t.subtypes)
+    allOf.push({ ...isType(type), then: { properties: { subtype: keys.length ? { enum: keys } : false } } })
+  }
 
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',

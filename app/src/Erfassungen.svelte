@@ -47,7 +47,8 @@
   const remoteRows = $derived(
     review.shown.map((e): Row => ({
       key: `p${e.number}`,
-      name: e.name,
+      // The name given here is shown at once; GitHub's takes over when it is the same.
+      name: ws.sessions.find((s) => s.pull === e.number)?.name ?? e.name,
       login: e.login,
       createdAt: e.createdAt,
       state: e.state === 'merged' ? 'merged' : e.closed ? 'closed' : e.state === 'submitted' ? 'submitted' : 'draft',
@@ -188,7 +189,7 @@
     void review.select(session.pull)
   }
   function rename() {
-    if (own && renameTo.trim()) ws.renameSession(own.id, renameTo)
+    if (own && renameTo.trim()) void ws.renameSession(own.id, renameTo).then(() => review.refresh())
     renaming = false
   }
   function select(node: HTMLInputElement) {

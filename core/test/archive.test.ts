@@ -57,6 +57,15 @@ describe('archive.yaml', () => {
     expect(schema.$defs.group.properties).toEqual({ files: false, storage: false, external: false })
   })
 
+  describe('subtypes', () => {
+    it('accepts those listed for the type and refuses any other', () => {
+      const base = { ...photo(), type: 'image' }
+      expect(validateObject({ ...base, subtype: OBJECT_TYPES.image[0] })).toEqual([])
+      expect(validateObject({ ...base, subtype: 'nonsense' })).not.toEqual([])
+      expect(validateObject({ ...base, subtype: 'album' })).not.toEqual([])
+    })
+  })
+
   describe('with more than one type that has no files', () => {
     const series = `object_types:
   series:
