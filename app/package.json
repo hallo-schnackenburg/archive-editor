@@ -1,17 +1,17 @@
 {
-  "name": "@tamandua/app",
+  "name": "@archive-editor/app",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "deploy:staging": "vite build --mode staging && cp wrangler.staging.toml wrangler.toml && wrangler pages deploy dist --project-name tamandua-staging; rm -f wrangler.toml",
-    "deploy:production": "vite build --mode production && cp wrangler.production.toml wrangler.toml && wrangler pages deploy dist --project-name tamandua-production; rm -f wrangler.toml",
+    "deploy:staging": "vite build --mode staging && cp wrangler.staging.toml wrangler.toml && wrangler pages deploy dist --project-name archive-editor-staging; rm -f wrangler.toml",
+    "deploy:production": "vite build --mode production && cp wrangler.production.toml wrangler.toml && wrangler pages deploy dist --project-name archive-editor-production; rm -f wrangler.toml",
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run"
   },
   "dependencies": {
-    "@tamandua/core": "*",
+    "@archive-editor/core": "*",
     "@codemirror/lang-yaml": "^6.1.3",
     "@codemirror/language": "^6.13.1",
     "@codemirror/lint": "^6.9.7",

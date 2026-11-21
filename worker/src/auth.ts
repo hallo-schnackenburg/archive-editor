@@ -14,7 +14,7 @@ import { LOGIN_COOKIE, SESSION_COOKIE, SESSION_DAYS, challengeOf, randomToken, r
 
 export interface AuthEnv extends GithubEnv, UploadEnv {
   SESSION_SECRET?: string
-  /** Where the app is reached from outside, e.g. https://tamandua.schnackenburg.de (no slash at the end). */
+  /** Where the app is reached from outside, e.g. https://archive-editor.schnackenburg.de (no slash at the end). */
   APP_URL?: string
 }
 

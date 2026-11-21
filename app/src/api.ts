@@ -7,7 +7,7 @@ export class SignedOut extends Error {
   }
 }
 
-const SIGNED_OUT = 'tamandua:signed-out'
+const SIGNED_OUT = 'archive-editor:signed-out'
 
 export const onSignedOut = (listener: () => void): (() => void) => {
   window.addEventListener(SIGNED_OUT, listener)

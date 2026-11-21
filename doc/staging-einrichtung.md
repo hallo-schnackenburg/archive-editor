@@ -5,14 +5,14 @@ GitHub App, eigener Worker, eigenes Pages-Projekt. Production wird später genau
 
 | | Staging |
 |---|---|
-| Adresse | `https://tamandua-staging.schnackenburg.de` |
+| Adresse | `https://archive-editor-staging.schnackenburg.de` |
 | Hetzner-Bucket | `schnackenburg-archiv-staging` |
 | Daten-Repo | `hallo-schnackenburg/archive-staging` |
-| GitHub App | `Schnackenburg Archiv Tamandua (staging)` |
-| Worker | `tamandua-worker-staging` (kein öffentlicher Zugang, nur über das Service Binding) |
-| Pages-Projekt | `tamandua-staging` |
+| GitHub App | `Schnackenburg Archiv-Editor (staging)` |
+| Worker | `archive-editor-worker-staging` (kein öffentlicher Zugang, nur über das Service Binding) |
+| Pages-Projekt | `archive-editor-staging` |
 
-So hängt es zusammen: Der Browser spricht nur mit `tamandua-staging.schnackenburg.de`. Das Pages-Projekt liefert die
+So hängt es zusammen: Der Browser spricht nur mit `archive-editor-staging.schnackenburg.de`. Das Pages-Projekt liefert die
 App aus. Alles unter `/api/*` nimmt eine Pages Function (`app/functions/api/[[path]].ts`) an und gibt es über das
 Service Binding an den Worker weiter. Dadurch ist das Session-Cookie ein gewöhnliches Cookie derselben Adresse.
 
@@ -55,7 +55,7 @@ Siehe `github-einrichtung.md`, mit den Namen aus der Tabelle. Danach die Client 
 ## 4. Pages-Projekt ausrollen
 
     cd app
-    npx wrangler pages project create tamandua-staging --production-branch main
+    npx wrangler pages project create archive-editor-staging --production-branch main
     npm run deploy:staging
 
 `deploy:staging` baut die App mit `.env.staging` (`VITE_WORKER_URL=/api`) und lädt `dist/` samt `functions/` hoch.
@@ -64,8 +64,8 @@ Siehe `github-einrichtung.md`, mit den Namen aus der Tabelle. Danach die Client 
 
 Reihenfolge einhalten:
 
-1. Cloudflare: Workers & Pages > `tamandua-staging` > Custom domains > `tamandua-staging.schnackenburg.de` hinzufügen.
-2. DNSimple: CNAME `tamandua-staging` auf `tamandua-staging.pages.dev`.
+1. Cloudflare: Workers & Pages > `archive-editor-staging` > Custom domains > `archive-editor-staging.schnackenburg.de` hinzufügen.
+2. DNSimple: CNAME `archive-editor-staging` auf `archive-editor-staging.pages.dev`.
 
 Ein CNAME vor Schritt 1 führt zu einem 522-Fehler.
 

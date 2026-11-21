@@ -1,7 +1,7 @@
 // The chat request to the model: what we send, and how the answer becomes tool calls.
 // Nothing here touches the network, so it can be tested on its own.
 
-import { CAPTURE_FIELDS, ENTITY_TYPES, EXTERNAL_TYPES, OBJECT_TYPES, type CaptureField, type ObjectType } from '@tamandua/core/archive'
+import { CAPTURE_FIELDS, ENTITY_TYPES, EXTERNAL_TYPES, OBJECT_TYPES, type CaptureField, type ObjectType } from '@archive-editor/core/archive'
 
 /** What the browser sends. The YAML texts come without the `files` list (hashes are noise for the model). */
 export interface ChatRequest {

@@ -35,7 +35,7 @@ export interface GitHubUser {
 }
 
 const API = 'https://api.github.com'
-const USER_AGENT = 'tamandua'
+const USER_AGENT = 'archive-editor'
 const TEN_YEARS = 10 * 365 * 24 * 3600 * 1000
 
 async function tokenRequest(env: GithubEnv, params: Record<string, string>, fetchFn: typeof fetch): Promise<Tokens> {

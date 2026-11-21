@@ -2,7 +2,7 @@
 // the SHA-256 (the file's identity), size, image dimensions and a small preview.
 // Nothing is uploaded here.
 
-import { blobChunks, hashBlob, hashChunks, originalPath, variantPath, type FileEntry } from '@tamandua/core'
+import { blobChunks, hashBlob, hashChunks, originalPath, variantPath, type FileEntry } from '@archive-editor/core'
 
 const PREVIEW_SIZE = 400
 /** The longer side of the picture for the detail view: big enough to read details, small enough to load fast. */

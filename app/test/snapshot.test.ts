@@ -1,6 +1,6 @@
 import { gzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
-import { snapshotHeader, snapshotLine } from '@tamandua/core'
+import { snapshotHeader, snapshotLine } from '@archive-editor/core'
 import { readSnapshot } from '../src/snapshot.js'
 
 const record = (n: number) => ({ path: `objects/ZH/${n}.yaml`, id: String(n), sha: `s${n}`, text: `id: ${n}\ntitle: "Ä Zeile ${n}"\n` })

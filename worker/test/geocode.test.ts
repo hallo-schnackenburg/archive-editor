@@ -29,7 +29,7 @@ describe('lookup', () => {
     expect(params.get('q')).toBe('Aussichtsturm, Schnackenburg')
     expect(params.get('limit')).toBe('1')
     expect(params.get('countrycodes')).toBe('de')
-    expect((init.headers as Record<string, string>)['user-agent']).toBe('tamandua')
+    expect((init.headers as Record<string, string>)['user-agent']).toBe('archive-editor')
   })
 
   it('takes country and user agent from the settings; an empty country list searches everywhere', async () => {

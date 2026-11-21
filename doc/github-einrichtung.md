@@ -8,7 +8,7 @@ Alles in der GitHub-Organisation bzw. dem Konto, dem das Daten-Repo gehört.
 1. Repo anlegen (`archive-dev` für local, `archive-staging`, `archive` für production), öffentlich
    und **leer**: ohne README, ohne `.gitignore`, ohne Lizenz.
 2. Die Vorlage `templates/archive/` als ersten Commit auf `main` hochladen. Sie enthält
-   `.github/workflows/validate.yml`, das das Tool-Repo `hallo-schnackenburg/tamandua` holt;
+   `.github/workflows/validate.yml`, das das Tool-Repo `hallo-schnackenburg/archive-editor` holt;
    es muss öffentlich sein. Aus dem Root dieses Repos (hier für staging):
 
    ```
@@ -36,11 +36,11 @@ Alles in der GitHub-Organisation bzw. dem Konto, dem das Daten-Repo gehört.
 
 Settings > Developer settings > GitHub Apps > New GitHub App.
 
-- Name: `Schnackenburg Archiv Tamandua (dev)`, `… (staging)` bzw. `Schnackenburg Archiv Tamandua`
+- Name: `Schnackenburg Archiv-Editor (dev)`, `… (staging)` bzw. `Schnackenburg Archiv-Editor`
 - Homepage URL: die Adresse der App
 - Callback URL: `http://localhost:5173/api/auth/callback` (local),
-  `https://tamandua-staging.schnackenburg.de/api/auth/callback` (staging) bzw.
-  `https://tamandua.schnackenburg.de/api/auth/callback` (production)
+  `https://archive-editor-staging.schnackenburg.de/api/auth/callback` (staging) bzw.
+  `https://archive-editor.schnackenburg.de/api/auth/callback` (production)
 - "Expire user authorization tokens": an
 - "Request user authorization (OAuth) during installation": aus
 - Webhook: "Active" aus

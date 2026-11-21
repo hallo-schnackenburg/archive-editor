@@ -1,5 +1,5 @@
 {
-  "name": "@tamandua/worker",
+  "name": "@archive-editor/worker",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@tamandua/core": "*"
+    "@archive-editor/core": "*"
   },
   "devDependencies": {
     "smol-toml": "^1.3.0",

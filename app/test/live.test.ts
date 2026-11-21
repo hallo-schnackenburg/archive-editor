@@ -144,7 +144,7 @@ describe('the live connection', () => {
 describe('liveUrl', () => {
   it('makes a WebSocket address of the Worker address, also a relative one', () => {
     expect(liveUrl('/api', 'http://localhost:5173/')).toBe('ws://localhost:5173/api/live')
-    expect(liveUrl('/api/', 'https://tamandua.example/app')).toBe('wss://tamandua.example/api/live')
+    expect(liveUrl('/api/', 'https://archive-editor.example/app')).toBe('wss://archive-editor.example/api/live')
     expect(liveUrl('https://worker.example', 'http://localhost:5173/')).toBe('wss://worker.example/live')
   })
 })

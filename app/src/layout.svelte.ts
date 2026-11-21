@@ -11,7 +11,7 @@ export class Sizes {
   readonly #defaults: number[]
 
   constructor(key: string, defaults: number[]) {
-    this.#key = `tamandua.layout.${key}`
+    this.#key = `archive-editor.layout.${key}`
     this.#defaults = defaults
     this.parts = this.#read() ?? [...defaults]
   }

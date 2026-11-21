@@ -1,4 +1,4 @@
-name = "tamandua-worker"
+name = "archive-editor-worker"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 
@@ -7,7 +7,7 @@ ALLOWED_ORIGIN = "http://localhost:5173"
 MODEL = "claude-haiku-5-5"
 
 GEOCODE_COUNTRIES = "de"
-GEOCODE_USER_AGENT = "tamandua"
+GEOCODE_USER_AGENT = "archive-editor"
 
 GITHUB_CLIENT_ID = "Iv23lio7AFNsecVWdaph"
 DATA_REPO = "hallo-schnackenburg/archive-dev"
@@ -38,16 +38,16 @@ tag = "v1"
 new_sqlite_classes = ["Hub"]
 
 [env.staging.vars]
-ALLOWED_ORIGIN = "https://tamandua-staging.schnackenburg.de"
+ALLOWED_ORIGIN = "https://archive-editor-staging.schnackenburg.de"
 MODEL = "claude-haiku-5-5"
 
 GEOCODE_COUNTRIES = "de"
-GEOCODE_USER_AGENT = "tamandua"
+GEOCODE_USER_AGENT = "archive-editor"
 
 GITHUB_CLIENT_ID = "Iv23lib3wO6Gt7ulIeHo"
 DATA_REPO = "hallo-schnackenburg/archive-staging"
 BASE_BRANCH = "main"
-APP_URL = "https://tamandua-staging.schnackenburg.de"
+APP_URL = "https://archive-editor-staging.schnackenburg.de"
 
 S3_ENDPOINT = "https://nbg1.your-objectstorage.com"
 S3_BUCKET = "schnackenburg-archiv-staging"
@@ -66,16 +66,16 @@ tag = "v1"
 new_sqlite_classes = ["Hub"]
 
 [env.production.vars]
-ALLOWED_ORIGIN = "https://tamandua.schnackenburg.de"
+ALLOWED_ORIGIN = "https://archive-editor.schnackenburg.de"
 MODEL = "claude-haiku-5-5"
 
 GEOCODE_COUNTRIES = "de"
-GEOCODE_USER_AGENT = "tamandua"
+GEOCODE_USER_AGENT = "archive-editor"
 
 GITHUB_CLIENT_ID = "Iv23liWYRPKzPydARzCg"
 DATA_REPO = "hallo-schnackenburg/archive"
 BASE_BRANCH = "main"
-APP_URL = "https://tamandua.schnackenburg.de"
+APP_URL = "https://archive-editor.schnackenburg.de"
 
 S3_ENDPOINT = "https://nbg1.your-objectstorage.com"
 S3_BUCKET = "schnackenburg-archiv-production"

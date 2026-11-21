@@ -1,8 +1,8 @@
 // What the user sees of an object's kind and place. The keys (types, subtypes, fields) are English and come from archive.yaml.
 
 // The German names come from archive.yaml (generated into core).
-export { ENTITY_NAMES, EXTERNAL_NAMES, FIELD_NAMES, SUBTYPE_NAMES, TYPE_NAMES } from '@tamandua/core/archive'
-import { SUBTYPE_NAMES, TYPE_NAMES } from '@tamandua/core/archive'
+export { ENTITY_NAMES, EXTERNAL_NAMES, FIELD_NAMES, SUBTYPE_NAMES, TYPE_NAMES } from '@archive-editor/core/archive'
+import { SUBTYPE_NAMES, TYPE_NAMES } from '@archive-editor/core/archive'
 
 /** Where an object that lives elsewhere can be found: the name of the first place, else its host. */
 export function placeOf(list: unknown): string {

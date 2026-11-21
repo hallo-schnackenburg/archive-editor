@@ -19,7 +19,7 @@
   const shown = $derived(archive.shown)
 
   // --- the groups: a tree on the left, which can be closed (this is remembered in this browser) ---
-  const GROUPS_OPEN = 'tamandua.groups'
+  const GROUPS_OPEN = 'archive-editor.groups'
   let treeOpen = $state(
     (() => {
       try {

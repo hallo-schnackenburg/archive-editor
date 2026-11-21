@@ -2,7 +2,7 @@
 // newline-delimited JSON; it is unpacked and cut into lines while it arrives, so that 20,000 objects never
 // exist twice in memory.
 
-import { parseSnapshotHeader, parseSnapshotLine, type SnapshotRecord } from '@tamandua/core'
+import { parseSnapshotHeader, parseSnapshotLine, type SnapshotRecord } from '@archive-editor/core'
 
 export interface Snapshot {
   /** The commit of main it was made from. */

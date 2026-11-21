@@ -28,8 +28,8 @@
 // checker generates code, which Workers do not allow); it only checks that the objects are what they
 // claim to be. The check in the data repository's pull request is the one that counts.
 
-import { objectPath, parseObjectId } from '@tamandua/core/paths'
-import { SNAPSHOT_BRANCH, SNAPSHOT_FILE } from '@tamandua/core/snapshot'
+import { objectPath, parseObjectId } from '@archive-editor/core/paths'
+import { SNAPSHOT_BRANCH, SNAPSHOT_FILE } from '@archive-editor/core/snapshot'
 import { GitHubError, OBJECT_FILE, Repo, type Checks, type ChangedFile, type GithubEnv, type ListedPull, type RawComment } from './github.js'
 import { objectUrl } from './s3.js'
 import { s3Config, type UploadEnv } from './upload.js'
@@ -163,7 +163,7 @@ export function titleOf(name: string, person: string, now = new Date()): string 
 /** The text of the pull request; the marker lets the app find the session's name again. */
 export function bodyOf(login: string, session: SessionRef): string {
   const marker = JSON.stringify(session).replace(/--/g, '-\\u002d')
-  return `Erfasst über Tamandua von ${login}.\n\n<!-- tamandua-session: ${marker} -->`
+  return `Erfasst über den Archiv-Editor von ${login}.\n\n<!-- archive-editor-session: ${marker} -->`
 }
 
 /** A session as the list shows it. */
@@ -186,7 +186,7 @@ export interface Erfassung {
   checks?: Checks
 }
 
-const MARKER = /<!-- tamandua-session: (\{.*?\}) -->/s
+const MARKER = /<!-- archive-editor-session: (\{.*?\}) -->/s
 
 /** The session's name and slug from the pull request's text (see `bodyOf`), or undefined if it has no marker. */
 export function markerOf(body: string | null): SessionRef | undefined {
@@ -299,7 +299,7 @@ export interface Comment {
   field?: string
 }
 
-const COMMENT_MARKER = /\n*<!-- tamandua-comment: (\{[^\n]*?\}) -->\s*$/
+const COMMENT_MARKER = /\n*<!-- archive-editor-comment: (\{[^\n]*?\}) -->\s*$/
 const FIELD = /^[a-z][a-z_]{0,39}$/
 
 /** A comment's text with what the app put at its end ("this is about that object") taken off. */
@@ -320,7 +320,7 @@ export function splitComment(body: string): { text: string; object?: string; fie
 /** The text of a comment as it is written to GitHub: with the note about the object at its end, so that a person reading it there sees only the text. */
 export function joinComment(text: string, object?: string, field?: string): string {
   if (!object) return text
-  return `${text}\n\n<!-- tamandua-comment: ${JSON.stringify({ object, ...(field ? { field } : {}) })} -->`
+  return `${text}\n\n<!-- archive-editor-comment: ${JSON.stringify({ object, ...(field ? { field } : {}) })} -->`
 }
 
 const MAX_COMMENT = 5000

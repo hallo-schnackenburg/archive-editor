@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { readField } from '@tamandua/core'
+  import { readField } from '@archive-editor/core'
   import { objectLabel } from './labels.js'
   import Lightbox from './Lightbox.svelte'
   import { validityOf } from './validity.js'

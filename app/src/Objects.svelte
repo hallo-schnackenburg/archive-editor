@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { locate, readField, readValue, validateObjectYaml } from '@tamandua/core'
+  import { locate, readField, readValue, validateObjectYaml } from '@archive-editor/core'
   import type { Diagnostic } from '@codemirror/lint'
   import { formatDate } from './dates.js'
   import Editor from './Editor.svelte'

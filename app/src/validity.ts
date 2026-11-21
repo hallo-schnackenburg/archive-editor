@@ -1,4 +1,4 @@
-import { readValue, validateObjectYaml, type Issue } from '@tamandua/core'
+import { readValue, validateObjectYaml, type Issue } from '@archive-editor/core'
 
 /**
  * How far an object is from being fit to submit:

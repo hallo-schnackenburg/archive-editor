@@ -12,7 +12,7 @@
   <Main />
 {:else if lock.state === 'other'}
   <main class="other">
-    <h1>Tamandua ist schon in einem anderen Tab geöffnet</h1>
+    <h1>Archiv-Editor ist schon in einem anderen Tab geöffnet</h1>
     <p>Damit sich nichts überschreibt, arbeitet immer nur ein Tab. Schließe den anderen Tab, oder arbeite hier weiter.</p>
     <button onclick={() => lock.take()}>Hier weiterarbeiten</button>
   </main>

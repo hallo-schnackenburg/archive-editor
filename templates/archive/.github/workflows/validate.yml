@@ -25,7 +25,7 @@ jobs:
       - name: Tool
         uses: actions/checkout@v4
         with:
-          repository: hallo-schnackenburg/tamandua
+          repository: hallo-schnackenburg/archive-editor
           path: tool
 
       - uses: actions/setup-node@v4

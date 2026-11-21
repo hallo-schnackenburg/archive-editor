@@ -2,7 +2,7 @@
 // storage and save to the same branch: they would overwrite each other and run into their own conflicts. The first tab holds
 // a lock (Web Locks API); any other tab says so and offers to take over.
 
-const LOCK = 'tamandua-workspace'
+const LOCK = 'archive-editor-workspace'
 
 type Locks = Pick<LockManager, 'request'>
 

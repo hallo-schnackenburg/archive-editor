@@ -53,7 +53,7 @@
   let view = $state<'work' | 'read'>('work')
   function readTab(): Tab {
     try {
-      return localStorage.getItem('tamandua.tab') === 'database' ? 'database' : 'sessions'
+      return localStorage.getItem('archive-editor.tab') === 'database' ? 'database' : 'sessions'
     } catch {
       return 'sessions'
     }
@@ -61,14 +61,14 @@
   function show(next: Tab) {
     tab = next
     try {
-      localStorage.setItem('tamandua.tab', next)
+      localStorage.setItem('archive-editor.tab', next)
     } catch {
       // not remembered, that is all
     }
   }
 
   // --- the address of the page: tab, session and chosen object are in it, so that back and forward work and it can be passed on (route.ts) ---
-  const REMEMBERED = 'tamandua.route'
+  const REMEMBERED = 'archive-editor.route'
   const recalled = (): string => {
     try {
       return sessionStorage.getItem(REMEMBERED) ?? ''
@@ -212,7 +212,7 @@
   {#if ws.login.state === 'user'}
     {@const user = ws.login.user}
     <header>
-      <img class="logo" src={`${import.meta.env.BASE_URL}tamandua.png`} alt="Tamandua" title="Tamandua" height="52" />
+      <img class="logo" src={`${import.meta.env.BASE_URL}archive-editor.png`} alt="Archiv-Editor" title="Archiv-Editor" height="52" />
       <div class="tabs" role="tablist" aria-label="Ansicht">
         {#each TABS as t (t.id)}
           <button role="tab" class:active={tab === t.id} aria-selected={tab === t.id} onclick={() => show(t.id)}>
@@ -246,8 +246,8 @@
     <div class="welcome"><p class="quiet">Einen Moment …</p></div>
   {:else}
     <div class="welcome">
-      <img class="logo big" src={`${import.meta.env.BASE_URL}tamandua.png`} alt="" height="96" />
-      <h1>Tamandua</h1>
+      <img class="logo big" src={`${import.meta.env.BASE_URL}archive-editor.png`} alt="" height="96" />
+      <h1>Archiv-Editor</h1>
       <p>Hier erfasst du Objekte des Archivs.</p>
       {#if ws.login.state === 'anonymous'}
         {#if ws.login.notice}<p class="notice">{ws.login.notice}</p>{/if}

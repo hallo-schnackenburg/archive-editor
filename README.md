@@ -1,6 +1,6 @@
-# Tamandua
+# Archive Editor
 
-Tamandua (an anteater eating it all) is a prototype of a browser tool for
+The archive editor is a prototype of a browser tool for
 volunteers to capture archive objects (photos, letters, brochures, protocols)
 without knowing YAML.
 

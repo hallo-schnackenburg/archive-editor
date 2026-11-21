@@ -2,7 +2,7 @@
 // (archive-mirror.ts), which is kept equal to main of the data repository; the list and the title search
 // work on that copy.
 
-import { checkParents, readObject } from '@tamandua/core'
+import { checkParents, readObject } from '@archive-editor/core'
 import { Mirror, type Derive, type MirrorBackend, type MirrorRecord, type Progress } from './archive-mirror.js'
 import { loadArchive, saveArchive } from './db.js'
 import { Live, type News } from './live.js'

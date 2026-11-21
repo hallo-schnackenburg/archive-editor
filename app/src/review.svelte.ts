@@ -2,7 +2,7 @@
 // has write access to the data repository does with them: look at what a submitted session changes, accept it (merge) or
 // close it. Everybody in the team may; there are no roles. The state is GitHub's; this only reads it and asks for the actions.
 
-import { checkParents } from '@tamandua/core'
+import { checkParents } from '@archive-editor/core'
 import { SignedOut } from './api.js'
 import type { Backend, Comment, RemoteErfassung, Review } from './backend.js'
 import { entryOf, type ArchiveDb, type Entry } from './database.svelte.js'

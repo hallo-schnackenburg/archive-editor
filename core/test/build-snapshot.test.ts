@@ -13,7 +13,7 @@ const B = '01JC8Z4A2P0H7W3E5S9Y6F1G2C'
 let root: string
 
 function repo(files: Record<string, string>) {
-  root = mkdtempSync(join(tmpdir(), 'tamandua-snap-'))
+  root = mkdtempSync(join(tmpdir(), 'archive-editor-snap-'))
   const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], { stdio: 'pipe' })
   git('init', '-q')
   for (const [path, text] of Object.entries(files)) {

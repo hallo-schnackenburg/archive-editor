@@ -10,7 +10,7 @@ const cookieValue = (response: Response, name: string) => cookiesOf(response).fi
 /** Starts a sign-in and returns what GitHub would be sent and the cookie that waits for the answer. */
 async function startLogin(gh = fakeGitHub()) {
   const response = await handle(get('/api/auth/login'), env, gh.fn)
-  return { response, to: new URL(response.headers.get('location')!), waiting: cookieValue(response, 'tamandua_login')! }
+  return { response, to: new URL(response.headers.get('location')!), waiting: cookieValue(response, 'archive_editor_login')! }
 }
 
 describe('sign-in', () => {
@@ -42,10 +42,10 @@ describe('sign-in', () => {
     const back = await handle(get(`/api/auth/callback?code=good&state=${to.searchParams.get('state')}`, waiting), env, gh.fn)
     expect(back.status).toBe(302)
     expect(back.headers.get('location')).toBe('http://localhost:5173/')
-    const session = cookieValue(back, 'tamandua_session')!
+    const session = cookieValue(back, 'archive_editor_session')!
     expect(session).toBeTruthy()
     expect(session).not.toContain('ghu_') // sealed, not readable
-    expect(back.headers.getSetCookie().find((c) => c.startsWith('tamandua_login='))).toContain('Max-Age=0')
+    expect(back.headers.getSetCookie().find((c) => c.startsWith('archive_editor_login='))).toContain('Max-Age=0')
 
     // PKCE: the code is exchanged together with the verifier whose hash was sent first.
     const exchange = gh.state.calls.find((c) => c.url.endsWith('/access_token'))!
@@ -69,7 +69,7 @@ describe('sign-in', () => {
     const gh = fakeGitHub({ permissions: { push: true, maintain: true } })
     const { to, waiting } = await startLogin(gh)
     const back = await handle(get(`/api/auth/callback?code=good&state=${to.searchParams.get('state')}`, waiting), env, gh.fn)
-    const me = await handle(get('/api/auth/me', cookieValue(back, 'tamandua_session')), env, gh.fn)
+    const me = await handle(get('/api/auth/me', cookieValue(back, 'archive_editor_session')), env, gh.fn)
     expect(((await me.json()) as { role: string }).role).toBe('admin')
   })
 
@@ -78,7 +78,7 @@ describe('sign-in', () => {
     const { to, waiting } = await startLogin(gh)
     const back = await handle(get(`/api/auth/callback?code=good&state=${to.searchParams.get('state')}`, waiting), env, gh.fn)
     expect(back.headers.get('location')).toBe('http://localhost:5173/?login=denied&user=anna')
-    expect(cookieValue(back, 'tamandua_session')).toBeUndefined()
+    expect(cookieValue(back, 'archive_editor_session')).toBeUndefined()
     expect(gh.state.revoked).toBe(1)
   })
 
@@ -92,7 +92,7 @@ describe('sign-in', () => {
     const { to, waiting: again } = await startLogin(gh)
     const badCode = await handle(get(`/api/auth/callback?code=bad&state=${to.searchParams.get('state')}`, again), env, gh.fn)
     expect(badCode.headers.get('location')).toBe('http://localhost:5173/?login=failed')
-    expect(cookieValue(badCode, 'tamandua_session')).toBeUndefined()
+    expect(cookieValue(badCode, 'archive_editor_session')).toBeUndefined()
   })
 
   it('answers 401 to "me" without a session and with a changed cookie', async () => {
@@ -121,7 +121,7 @@ describe('the token of a session', () => {
     const almostOut = await cookieOf({ ...anna, accessExpires: Date.now() + 60_000 })
     const response = await handle(get('/api/auth/me', almostOut), env, gh.fn)
     expect(response.status).toBe(200)
-    const renewed = cookieValue(response, 'tamandua_session')
+    const renewed = cookieValue(response, 'archive_editor_session')
     expect(renewed).toBeTruthy()
     expect(renewed).not.toBe(almostOut)
 
@@ -136,7 +136,7 @@ describe('the token of a session', () => {
     const almostOut = await cookieOf({ ...anna, accessExpires: Date.now() + 60_000 })
     const response = await handle(get('/api/auth/me', almostOut), env, gh.fn)
     expect(response.status).toBe(401)
-    expect(cookieValue(response, 'tamandua_session')).toBeUndefined()
+    expect(cookieValue(response, 'archive_editor_session')).toBeUndefined()
   })
 
   it('is left alone by a WebSocket: its response cannot carry a new cookie, so the refresh token must not be used up', async () => {

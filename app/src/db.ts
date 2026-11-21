@@ -6,7 +6,7 @@ import type { MirrorRecord } from './archive-mirror.js'
 import { packBlobs, unpackBlobs } from './blobs.js'
 import type { ChatMessage, FileRecord, ObjectRecord, Session } from './workspace.svelte.js'
 
-const DB_NAME = 'tamandua'
+const DB_NAME = 'archive-editor'
 const FILES = 'files'
 const OBJECTS = 'objects'
 const CHAT = 'chat' // one record, {id: 'log', messages: [...]}

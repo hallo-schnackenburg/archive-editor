@@ -65,7 +65,7 @@ describe('Sizes', () => {
 
   it('ignores what is kept if it does not fit any more (another number of panes, nonsense, zero)', () => {
     for (const bad of ['[50,50]', 'nonsense', '[0,50,50]', '[1,"a",3]', '{"a":1}']) {
-      kept['tamandua.layout.view'] = bad
+      kept['archive-editor.layout.view'] = bad
       expect(new Sizes('view', THIRDS).parts[0]).toBeCloseTo(100 / 3, 5)
     }
   })

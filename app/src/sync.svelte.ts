@@ -2,7 +2,7 @@
 // session is submitted, followed (accepted, given back, closed) and aligned with what GitHub says. The workspace holds
 // the state; this class decides when and what is sent, and how the answers are taken over.
 
-import { validateObjectYaml } from '@tamandua/core'
+import { validateObjectYaml } from '@archive-editor/core'
 import { SignedOut } from './api.js'
 import { StaleBranch, type Backend, type Removed, type RemoteErfassung, type SaveResult, type SessionRef } from './backend.js'
 import type { ChatMessage, Login, ObjectRecord, Session } from './workspace.svelte.js'

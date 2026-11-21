@@ -66,6 +66,6 @@ export function setCookie(name: string, value: string, maxAge: number, secure: b
   return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? '; Secure' : ''}`
 }
 
-export const SESSION_COOKIE = 'tamandua_session'
-export const LOGIN_COOKIE = 'tamandua_login'
+export const SESSION_COOKIE = 'archive_editor_session'
+export const LOGIN_COOKIE = 'archive_editor_login'
 export const SESSION_DAYS = 30

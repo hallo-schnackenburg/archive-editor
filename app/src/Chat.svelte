@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
-  import { readField } from '@tamandua/core'
+  import { readField } from '@archive-editor/core'
   import type { Workspace } from './workspace.svelte.js'
 
   let { workspace: ws }: { workspace: Workspace } = $props()

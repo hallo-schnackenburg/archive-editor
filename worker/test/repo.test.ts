@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { objectPath } from '@tamandua/core/paths'
+import { objectPath } from '@archive-editor/core/paths'
 import { handle, type Env } from '../src/index.js'
 import { bodyOf, branchOf, commentsOf, erfassungenOf, joinComment, markerOf, messageOf, parseSessionRef, splitComment, titleOf } from '../src/repo.js'
 import { authEnv, blobSha, cookieOf, fakeGitHub } from './support.js'
@@ -222,7 +222,7 @@ describe('the pull request as a draft', () => {
     const created = gh.state.calls.find((c) => c.method === 'POST' && c.url.endsWith('/pulls'))!
     expect(created.body).toMatchObject({ head: BRANCH, base: 'main', draft: true })
     expect(created.body.title).toMatch(/^Dachbodenfund Postkarten \(Anna Beispiel, \d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}\)$/)
-    expect(created.body.body).toContain('<!-- tamandua-session: {"slug":"dachbodenfund-postkarten-4k2x","name":"Dachbodenfund Postkarten"} -->')
+    expect(created.body.body).toContain('<!-- archive-editor-session: {"slug":"dachbodenfund-postkarten-4k2x","name":"Dachbodenfund Postkarten"} -->')
 
     const second = (await (await saveOf(gh, objects(ID_B))).json()) as { pull: { number: number } }
     expect(second.pull.number).toBe(first.pull.number)
@@ -651,8 +651,8 @@ describe('comments on a session', () => {
   })
 
   it('does not believe a note that is not one', () => {
-    expect(splitComment('Text\n\n<!-- tamandua-comment: {"object":"nicht-eine-id"} -->')).toEqual({ text: 'Text' })
-    expect(splitComment('Text\n\n<!-- tamandua-comment: {kaputt -->')).toEqual({ text: 'Text\n\n<!-- tamandua-comment: {kaputt -->' })
+    expect(splitComment('Text\n\n<!-- archive-editor-comment: {"object":"nicht-eine-id"} -->')).toEqual({ text: 'Text' })
+    expect(splitComment('Text\n\n<!-- archive-editor-comment: {kaputt -->')).toEqual({ text: 'Text\n\n<!-- archive-editor-comment: {kaputt -->' })
     expect(splitComment(joinComment('x', ID_A, 'Not A Field'))).toEqual({ text: 'x', object: ID_A, field: undefined })
   })
 
@@ -662,7 +662,7 @@ describe('comments on a session', () => {
     expect(made.status).toBe(201)
     expect(((await made.json()) as { comment: C }).comment).toMatchObject({ login: 'anna', text: 'Datierung prüfen', object: ID_A, field: 'date', kind: 'issue', edited: false })
     // GitHub has the text with the note, and nothing else is needed to remember what it was about.
-    expect(gh.state.comments[0].body).toContain('<!-- tamandua-comment:')
+    expect(gh.state.comments[0].body).toContain('<!-- archive-editor-comment:')
     const list = (await (await send(gh, 'GET', `/repo/erfassung/${number}/comments`)).json()) as { comments: C[] }
     expect(list.comments).toHaveLength(1)
     expect(list.comments[0]).toMatchObject({ text: 'Datierung prüfen', object: ID_A, field: 'date' })
@@ -727,7 +727,7 @@ describe('comments on a session', () => {
 
   it('does not let a comment carry a note of its own into the text', async () => {
     const { gh, number } = await started()
-    await send(gh, 'POST', `/repo/erfassung/${number}/comments`, { text: 'Sieh <!-- tamandua-comment: {"object":"' + ID_B + '"} -->' })
+    await send(gh, 'POST', `/repo/erfassung/${number}/comments`, { text: 'Sieh <!-- archive-editor-comment: {"object":"' + ID_B + '"} -->' })
     const { comments } = (await (await send(gh, 'GET', `/repo/erfassung/${number}/comments`)).json()) as { comments: C[] }
     expect(comments[0].object).toBeUndefined()
   })

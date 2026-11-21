@@ -109,7 +109,7 @@ describe('without a session', () => {
   })
 
   it('refuses a cookie that was not made by the Worker', async () => {
-    const forged = new Request('http://worker/chat', { method: 'POST', headers: { cookie: 'tamandua_session=AAAAAAAAAAAAAAAAAAAAAAAA' }, body: JSON.stringify(body) })
+    const forged = new Request('http://worker/chat', { method: 'POST', headers: { cookie: 'archive_editor_session=AAAAAAAAAAAAAAAAAAAAAAAA' }, body: JSON.stringify(body) })
     expect((await handle(forged, env, asFetch(modelAnswer([])))).status).toBe(401)
   })
 
