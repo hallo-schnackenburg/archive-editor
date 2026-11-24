@@ -51,13 +51,13 @@ describe('the news about sessions', () => {
   it('passes on a push to the branch of a session', async () => {
     hubOf = fakeHub()
     expect((await send('push', { ref: 'refs/heads/erfassung/anna/x', after: 'abc' })).status).toBe(204)
-    expect(told()).toEqual([{ type: 'pull' }])
+    expect(told()).toEqual([{ type: 'pull', branch: 'erfassung/anna/x', head: 'abc' }])
   })
 
   it('passes on events of the pull request of a session, with its number', async () => {
     hubOf = fakeHub()
     await send('pull_request', { action: 'closed', number: 7, pull_request: { head: { ref: 'erfassung/anna/x' } } })
-    expect(told()).toEqual([{ type: 'pull', number: 7 }])
+    expect(told()).toEqual([{ type: 'pull', number: 7, branch: 'erfassung/anna/x' }])
   })
 
   it('ignores the pull requests that are no session', async () => {
@@ -79,13 +79,13 @@ describe('the news about sessions', () => {
     await send('check_run', { action: 'completed', check_run: { check_suite: { head_branch: 'erfassung/anna/x' } } })
     await send('status', { state: 'success', branches: [{ name: 'erfassung/anna/x' }] })
     expect((await send('check_run', { check_run: { check_suite: { head_branch: 'feature/x' } } })).status).toBe(202)
-    expect(told()).toEqual([{ type: 'pull' }, { type: 'pull' }])
+    expect(told()).toEqual([{ type: 'pull', branch: 'erfassung/anna/x' }, { type: 'pull', branch: 'erfassung/anna/x' }])
   })
 
   it('does not take a number that is none', async () => {
     hubOf = fakeHub()
     await send('pull_request', { number: '7; drop', pull_request: { head: { ref: 'erfassung/anna/x' } } })
-    expect(told()).toEqual([{ type: 'pull' }])
+    expect(told()).toEqual([{ type: 'pull', branch: 'erfassung/anna/x' }])
   })
 })
 

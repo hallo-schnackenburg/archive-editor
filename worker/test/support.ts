@@ -1,5 +1,5 @@
 import { vi } from 'vitest'
-import { seal, SESSION_COOKIE, type Auth } from '../src/session.js'
+import { seal, type Auth } from '../src/session.js'
 
 export const SECRET = 'test-secret-test-secret-test-secret'
 
@@ -26,7 +26,7 @@ export const anna: Auth = {
 
 /** The Cookie header of a signed-in person. */
 export async function cookieOf(session: Auth = anna): Promise<string> {
-  return `${SESSION_COOKIE}=${await seal(session, SECRET)}`
+  return `archive_editor_session=${await seal(session, SECRET)}`
 }
 
 /** A stand-in for the hash GitHub gives a file: the same text, the same hash. */
